@@ -42,3 +42,22 @@ Crear la base del proyecto.
 Sprint 0.1 completado.
 
 El proyecto está listo para comenzar el Sprint 0.2.
+
+## Sesión - 17/07/2026
+
+Resumen:
+
+- Se confirma oficialmente el equipo fundador.
+- Hermes acepta provisionalmente el rol de Platform Engineer.
+- Hermes entrega el primer Capability Profile (Draft v0.1).
+- Se acuerda que Runtime comienza oficialmente este fin de semana.
+- Se define el Sprint 0.1.
+- Se decide preparar también el portátil como segundo entorno de desarrollo.
+
+Próxima sesión:
+
+Kickoff oficial de Runtime.
+Primer commit.
+Publicación del repositorio.
+Configuración del portátil.
+Inicio de la implementación.
