@@ -37,6 +37,17 @@ _KNOWN = {
     "pausa la musica": "pause_music",
     "detén la música": "pause_music",
     "deten la musica": "pause_music",
+    "stop": "pause_music",
+    "stop la música": "pause_music",
+    "stop la musica": "pause_music",
+    "parar": "pause_music",
+    "parar la música": "pause_music",
+    "parar la musica": "pause_music",
+    "detener": "pause_music",
+    "detener la música": "pause_music",
+    "detener la musica": "pause_music",
+    "apaga la música": "pause_music",
+    "apaga la musica": "pause_music",
     "reanuda": "resume_music",
     "reanuda la música": "resume_music",
     "reanuda la musica": "resume_music",
@@ -113,7 +124,7 @@ def understand(user_text: str) -> Intent:
             label = "next_track"
         elif "anterior" in text or "atrás" in text or "atras" in text or "previa" in text:
             label = "previous_track"
-        elif "pausa" in text or "para" in text or "detén" in text or "deten" in text:
+        elif "pausa" in text or "para" in text or "detén" in text or "deten" in text or "stop" in text or "parar" in text or "detener" in text or "apaga la música" in text or "apaga la musica" in text:
             label = "pause_music"
         elif "reanuda" in text or "continúa" in text or "continua" in text or "sigue" in text:
             label = "resume_music"

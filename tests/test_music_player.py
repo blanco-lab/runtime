@@ -42,6 +42,11 @@ INTENT_CASES = [
     ("Pon rock español", "play_music"),
     ("Pon música para dormir", "play_music"),   # 'para' no debe romperlo
     ("Pausa", "pause_music"),
+    ("Stop", "pause_music"),
+    ("Stop la música", "pause_music"),
+    ("Parar", "pause_music"),
+    ("Detener la música", "pause_music"),
+    ("Apaga la música", "pause_music"),
     ("Continúa", "resume_music"),
     ("Siguiente canción", "next_track"),
     ("Canción anterior", "previous_track"),
@@ -68,6 +73,7 @@ def test_pipeline_real() -> bool:
     checks = [
         ("Pon Pájaros de Barro", "reproduciendo"),
         ("Pausa", "pausado"),
+        ("Stop", "pausado"),
         ("Continúa", "reanudado"),
         ("Siguiente canción", "siguiente"),
         ("Volumen al 40%", "volumen 40%"),
