@@ -21,13 +21,34 @@ from ...backend import Backend  # sube a capabilities/backend.py
 _BIN = "spotify_player"
 
 
-def _run(args: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        [_BIN, *args],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+def _run(args: list[str], retries: int = 3) -> subprocess.CompletedProcess:
+    """Ejecuta spotify_player con reintentos ante fallos de red.
+
+    Captura excepciones de red transitorias (errores de socket/HTTP al
+    enviar la petición, timeouts de conexión) y reintenta con backoff
+    exponencial. Los errores de negocio de Spotify (returncode != 0) NO
+    se reintentan: se devuelven tal cual para que el caller reporte.
+    """
+    import time
+
+    last_err: Exception | None = None
+    for attempt in range(retries):
+        try:
+            return subprocess.run(
+                [_BIN, *args],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (subprocess.TimeoutExpired, OSError) as e:
+            # TimeoutExpired hereda de OSError (SubprocessError). También
+            # cubre ConnectionError/Timeout de la capa de red subyacente.
+            last_err = e
+            if attempt == retries - 1:
+                break
+            time.sleep(0.5 * (2 ** attempt))  # 0.5s, 1s, 2s...
+    assert last_err is not None
+    raise last_err
 
 
 class SpotifyPlayerBackend(Backend):
