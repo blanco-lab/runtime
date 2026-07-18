@@ -23,14 +23,26 @@ def build(intent_label: str, intent=None) -> Action:
     Recibe el Intent completo para tomar params como `query`.
     """
     query = None
+    percent = None
     if intent is not None:
         query = intent.entities.get("query")
+        percent = intent.entities.get("percent")
 
-    if intent_label == "play_music":
+    # Órdenes de la capability music_player (play + control de reproducción).
+    _MUSIC_ACTIONS = {
+        "play_music", "pause_music", "resume_music",
+        "next_track", "previous_track", "set_volume",
+    }
+    if intent_label in _MUSIC_ACTIONS:
+        params: dict[str, Any] = {}
+        if intent_label == "play_music":
+            params["query"] = query
+        elif intent_label == "set_volume":
+            params["percent"] = percent
         return Action(
-            type="play_music",
+            type=intent_label,
             capability="music_player",
-            params={"query": query},
+            params=params,
             intent_label=intent_label,
         )
     if intent_label == "shutdown_system":

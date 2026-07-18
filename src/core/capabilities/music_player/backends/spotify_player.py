@@ -81,23 +81,34 @@ class SpotifyPlayerBackend(Backend):
             "artists": artists,
         }
 
+    def _simple(self, args: list[str], ok_msg: str) -> dict:
+        """Ejecuta un comando de control y reporta el resultado real."""
+        if shutil.which(_BIN) is None:
+            return {"ok": False, "message": f"{_BIN} no encontrado en PATH."}
+        try:
+            res = _run(args)
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "message": "Timeout."}
+        if res.returncode != 0:
+            err = res.stderr.strip()
+            hint = ""
+            if "404" in err or "no playback" in err.lower():
+                hint = " (sin dispositivo de Spotify activo o nada sonando)"
+            return {"ok": False, "message": f"Error: {err}{hint}"}
+        return {"ok": True, "message": ok_msg}
+
     def pause(self) -> dict:
-        _run(["playback", "pause"])
-        return {"ok": True, "message": "Pausado."}
+        return self._simple(["playback", "pause"], "Pausado.")
 
     def resume(self) -> dict:
-        _run(["playback", "play"])
-        return {"ok": True, "message": "Reanudado."}
+        return self._simple(["playback", "play"], "Reanudado.")
 
     def next(self) -> dict:
-        _run(["playback", "next"])
-        return {"ok": True, "message": "Siguiente."}
+        return self._simple(["playback", "next"], "Siguiente.")
 
     def previous(self) -> dict:
-        _run(["playback", "previous"])
-        return {"ok": True, "message": "Anterior."}
+        return self._simple(["playback", "previous"], "Anterior.")
 
     def volume(self, percent: int) -> dict:
         p = max(0, min(100, int(percent)))
-        _run(["playback", "volume", str(p)])
-        return {"ok": True, "message": f"Volumen {p}%."}
+        return self._simple(["playback", "volume", str(p)], f"Volumen {p}%.")

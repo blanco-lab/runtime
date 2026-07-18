@@ -13,6 +13,19 @@ concreta (ver ADR-0004).
     previous()       anterior
     volume(percent)  volumen 0-100
 
+## Órdenes en lenguaje natural (comando `runtime`)
+
+    runtime "Pon Pájaros de Barro"        -> reproduce
+    runtime "Reproduce Bohemian Rhapsody" -> reproduce
+    runtime "Pausa" / "Para la música"    -> pausa
+    runtime "Reanuda" / "Continúa"        -> reanuda
+    runtime "Siguiente" / "Salta"         -> siguiente
+    runtime "Anterior"                    -> anterior
+    runtime "Sube el volumen al 60%"      -> volumen 60%
+    runtime "Baja el volumen"             -> volumen 30%
+
+El reconocimiento es un mock por palabras clave (mañana lo hará la IA).
+
 ## Arquitectura
 
     music_player (Capability, agnóstica)

@@ -26,8 +26,21 @@ def execute(action: Action) -> ExecutionResult:
     """
     if action.capability == "music_player":
         mp = MusicPlayer()
-        query = action.params.get("query") or ""
-        result = mp.play(query)
+        t = action.type
+        if t == "play_music":
+            result = mp.play(action.params.get("query") or "")
+        elif t == "pause_music":
+            result = mp.pause()
+        elif t == "resume_music":
+            result = mp.resume()
+        elif t == "next_track":
+            result = mp.next()
+        elif t == "previous_track":
+            result = mp.previous()
+        elif t == "set_volume":
+            result = mp.volume(action.params.get("percent") or 50)
+        else:
+            result = {"ok": False, "message": f"Orden '{t}' no soportada."}
         return ExecutionResult(
             success=result.get("ok", False),
             message=result.get("message", ""),
