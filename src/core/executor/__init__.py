@@ -1,16 +1,14 @@
 """Executor: realiza la acción utilizando el proveedor adecuado.
 
-En el MVP, el Executor es un MOCK: no reproduce música de verdad, solo
-demuestra que el pipeline llega hasta aquí y devuelve un resultado.
-
-Punto de extensión: aquí se enruta la Action a la capacidad real
-(music_player, email.send, bash.run, ...) según el proveedor disponible.
-La capacidad es indiferente de quién la provea (Atlas/Hermes/script/API).
+En la Fase 1, music_player es una CAPABILITY REAL (delega en
+spotify_player). El resto de capacidades permanece mock hasta que se
+implementen (ADR-0003 / ADR-0004).
 """
 from dataclasses import dataclass
 from typing import Any
 
 from ..action import Action
+from ..capabilities.music_player import MusicPlayer
 
 
 @dataclass
@@ -20,25 +18,34 @@ class ExecutionResult:
     data: dict[str, Any] | None = None
 
 
-# Registro mock de capacidades disponibles (sustituible por descubrimiento real).
-_MOCK_CAPABILITIES = {"music_player"}
-
-
 def execute(action: Action) -> ExecutionResult:
-    """Ejecuta la Action. En el MVP, mock: imprime por pantalla.
+    """Ejecuta la Action.
 
-    Demuestra que el pipeline recorre de extremo a extremo.
+    - music_player: capability REAL (spotify_player hoy).
+    - lo demás: mock (sin efecto).
     """
+    if action.capability == "music_player":
+        mp = MusicPlayer()
+        query = action.params.get("query") or ""
+        result = mp.play(query)
+        return ExecutionResult(
+            success=result.get("ok", False),
+            message=result.get("message", ""),
+            data=result,
+        )
+
+    # Mock para el resto de capacidades (no implementadas todavía).
     if action.capability not in _MOCK_CAPABILITIES:
         return ExecutionResult(
             success=False,
-            message=f"Capacidad '{action.capability}' no disponible en el mock.",
+            message=f"Capacidad '{action.capability}' no disponible.",
         )
-
-    # Mock: no reproduce música real, solo lo certifica.
     return ExecutionResult(
         success=True,
         message=f"[MOCK] Ejecutando capacidad '{action.capability}' "
-                f"para acción '{action.type}'. (Sin efecto real en el MVP.)",
+                f"para acción '{action.type}'. (Sin efecto real.)",
         data={"capability": action.capability, "type": action.type},
     )
+
+
+_MOCK_CAPABILITIES = {"none"}

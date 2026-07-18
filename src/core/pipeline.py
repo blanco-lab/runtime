@@ -18,7 +18,7 @@ def run(user_text: str) -> str:
     Demuestra que Runtime puede procesar una petición de extremo a extremo.
     """
     intent = understand(user_text)            # Intent
-    action = build(intent.label)             # Action
+    action = build(intent.label, intent)       # Action
     safety = evaluate(action)                # Safety
     execution = None
     if safety.decision.value != "reject":

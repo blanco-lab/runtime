@@ -16,16 +16,21 @@ class Action:
     intent_label: str = ""
 
 
-def build(intent_label: str) -> Action:
+def build(intent_label: str, intent=None) -> Action:
     """Construye la Action correspondiente a una intención.
 
     Punto de extensión: aquí se mapea intención -> (capacidad, parámetros).
+    Recibe el Intent completo para tomar params como `query`.
     """
+    query = None
+    if intent is not None:
+        query = intent.entities.get("query")
+
     if intent_label == "play_music":
         return Action(
             type="play_music",
             capability="music_player",
-            params={"query": None},
+            params={"query": query},
             intent_label=intent_label,
         )
     if intent_label == "shutdown_system":

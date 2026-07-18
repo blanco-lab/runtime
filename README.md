@@ -20,17 +20,26 @@ Su desarrollo sigue una metodología colaborativa entre personas y agentes de in
 
 ## Estado del proyecto
 
-🚧 Foundation (Sprint 0.1)
+🚧 Fase 1 — Construcción
 
-Actualmente el proyecto está definiendo:
+La Fase 0 (Fundación) está cerrada y publicada. Runtime ya ejecuta su
+primer pipeline REAL de extremo a extremo:
 
-- Arquitectura
-- Metodología
-- Estándares
-- Runtime HQ
-- Documentación
+    "Pon Pájaros de Barro"
+        → Intent → Action → Safety → Executor
+        → Capability: music_player → Backend: spotify_player
+        → la música suena de verdad.
 
-Todavía no existe código de producción.
+Runtime ya no es una maqueta: actúa sobre el sistema.
+
+### Principio arquitectónico (ADR-0004)
+
+Runtime nunca depende de aplicaciones concretas. Runtime solo conoce
+**Capabilities**. Las aplicaciones reales son **Backends**
+intercambiables (spotify_player, mpv, jellyfin...). Cambiar de backend
+no afecta al pipeline.
+
+Ver: `docs/capabilities/music_player.md` y `hq/decisions/ADR-0004.md`.
 
 ---
 
@@ -89,4 +98,4 @@ Codex — Software Engineer
 
 ## Licencia
 
-Pendiente de definir.
+Apache-2.0 (ver `LICENSE`).
