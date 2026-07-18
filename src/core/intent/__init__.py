@@ -108,6 +108,15 @@ def understand(user_text: str) -> Intent:
         # Volumen: "sube/baja el volumen", "volumen al 50%", "pon el volumen a 40".
         elif "volumen" in text or (("sube" in text or "baja" in text) and "%" in text):
             label = "set_volume"
+        # Control por palabra clave (variantes naturales).
+        elif "siguiente" in text or "salta" in text or "próxima" in text or "proxima" in text:
+            label = "next_track"
+        elif "anterior" in text or "atrás" in text or "atras" in text or "previa" in text:
+            label = "previous_track"
+        elif "pausa" in text or "para" in text or "detén" in text or "deten" in text:
+            label = "pause_music"
+        elif "reanuda" in text or "continúa" in text or "continua" in text or "sigue" in text:
+            label = "resume_music"
         # Fallback: si contiene "música"/"musica" -> play_music
         elif "música" in text or "musica" in text:
             label = "play_music"
