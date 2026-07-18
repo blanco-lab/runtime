@@ -41,6 +41,12 @@ no afecta al pipeline.
 
 Ver: `docs/capabilities/music_player.md` y `hq/decisions/ADR-0004.md`.
 
+### Verificación
+
+Comando canónico (ejecuta toda la batería de tests):
+
+    python3 tests/run_all.py
+
 ---
 
 ## Estructura
