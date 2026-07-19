@@ -110,11 +110,11 @@ def loop(once: bool = False):
             nuevos = [m for m in msgs if m["id"] not in seen
                       and m["author"] != "Hermes"]
             for m in nuevos:
-                seen.add(m["id"])
                 try:
                     resp = _hermes_think(m["text"])
                     _http("POST", "/messages",
                           {"author": "Hermes", "text": resp, "parent_id": m["id"]})
+                    seen.add(m["id"])  # solo tras postear con éxito
                     log.info("Blanco -> Hermes respondió (%d chars)", len(resp))
                 except Exception:
                     log.exception("error al responder mensaje %s", m["id"])
