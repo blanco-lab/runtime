@@ -115,6 +115,28 @@ def main() -> int:
         ok = ok and ok_l
         print(f"  [{'OK ' if ok_l else 'FAIL'}] listado -> {out3[:60]!r}...")
 
+        # El resultado del listado debe ser estructurado para Horizon y
+        # Runtime no debe guardar nada en disco (ADR-0009).
+        import os
+        res = run("lista los capitulos de monos estocasticos")
+        # run() devuelve texto; verificamos el objeto vía Executor directo.
+        from src.core.executor import execute
+        from src.core.action import build
+        from src.core.intent import understand as _u
+        ex = execute(build(_u("lista los capitulos de monos estocasticos").label,
+                            _u("lista los capitulos de monos estocasticos")))
+        structured = ex.data.get("data") if ex.data else None
+        ok_struct = (structured and structured.get("show_id") == "SHOW1"
+                     and structured.get("offset") == 0
+                     and "episodes" in structured)
+        ok = ok and ok_struct
+        print(f"  [{'OK ' if ok_struct else 'FAIL'}] objeto estructurado para Horizon -> {bool(structured)}")
+        # Runtime no debe haber creado caché de podcast.
+        cache_dir = Path.home() / ".cache" / "runtime"
+        ok_nocache = not (cache_dir / "last_podcast.json").exists()
+        ok = ok and ok_nocache
+        print(f"  [{'OK ' if ok_nocache else 'FAIL'}] Runtime no guarda caché de podcast")
+
     print("\nRESULTADO:", "TODO VERDE" if ok else "HAY FALLOS")
     return 0 if ok else 1
 

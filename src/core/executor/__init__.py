@@ -95,20 +95,34 @@ def _execute_podcast(mp: "MusicPlayer", params: dict) -> dict:
     show_name = show.get("name", show_query)
 
     def _list_formatted() -> dict:
-        """Lista los 10 últimos publicados (formato para el usuario)."""
+        """Lista los 10 últimos publicados (texto para el usuario + datos
+        estructurados para Horizon). Runtime NO recuerda nada: el objeto
+        se devuelve, no se almacena (ADR-0009 / frontera Runtime-Horizon)."""
         r = disp.dispatch({"kind": "list_episodes", "show_id": show_id,
                            "limit": 10, "offset": 0})
         if not r.get("ok"):
             return r
         total = r["data"].get("total", len(r["data"]["items"]))
         items = r["data"]["items"]
-        lines = [f"📋 {show_name} — últimos {len(items)} episodios"
-                 f" (de {total}):"]
+        episodes = [{"uri": e.get("uri"), "name": e.get("name", "?")} for e in items]
+        lines = [f"📋 {show_name} — últimos {len(items)} episodios (de {total}):"]
         for i, e in enumerate(items, 1):
-            name = e.get("name", "?")
-            lines.append(f"  {i}. {name}")
-        lines.append("(di 'pon el 7' o 'más' para seguir — Horizon recordará el offset)")
-        return {"ok": True, "message": "\n".join(lines), "show_id": show_id}
+            lines.append(f"  {i}. {e.get('name', '?')}")
+        lines.append(f'(para ir directo: runtime podcast "capítulo N de {show_name}" '
+                     f'o "el episodio que se llama ...")')
+        return {
+            "ok": True,
+            "message": "\n".join(lines),
+            "show_id": show_id,
+            # Objeto estructurado para Horizon (Runtime no lo guarda).
+            "data": {
+                "show_id": show_id,
+                "show_name": show_name,
+                "total": total,
+                "offset": 0,
+                "episodes": episodes,
+            },
+        }
 
     # Listado de episodios (los 10 últimos publicados; "más" lo recordará
     # Horizon). "Últimos" = del más reciente al más viejo (orden de la API).
