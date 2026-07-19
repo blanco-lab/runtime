@@ -1,8 +1,8 @@
 # ADR-0013 — HQ v2 "Puente de Mando": arquitectura del centro de operaciones
 
-- Estado: PROPUESTA (para aprobación de Atlas). HQ Serve v1 queda
-  CONGELADA (ADR-0012). Este ADR define el diseño de v2; NO se implementa
-  código hasta aprobación.
+- Estado: APROBADA CON AJUSTES (Atlas, 2026-07-19). Pendiente de aplicar
+  los 5 ajustes en este mismo ADR y en DESIGN-HQ-v2, luego congelar
+  diseño y pasar a v2b. HQ Serve v1 sigue CONGELADA (ADR-0012).
 - Autor: Hermes · 2026-07-19
 
 ## Contexto
@@ -38,43 +38,73 @@ de Runtime; HQ v2 es Horizon HQ, no Runtime.
    - settings (nuevo): lectura de config (Runtime/HQ/Horizon/Providers/
      Services/Users/Auth). Escritura en fase posterior.
 
-4. MODELO DE ESTADO (clave):
-   - CONTENIDO = git, read-only a través de la API (como hoy).
-   - ESTADO VIVO de HQ (conversaciones, borradores, sesión) = almacén
-     ligero PROPIO de HQ (`hq/.state/`, git-ignored), NO contamina la
-     fuente de verdad.
-   - El ÚNICO write a git lo hace HQ sobre SUS PROPIOS artefactos
-     (Team→ADR/Tarea/Principio/Informe; Meetings→MEETING-*.md), bajo
-     acción EXPLÍCITA del usuario y con trazabilidad. Esto extiende pero
-     no rompe ADR-0012: el dashboard de lectura sigue sin tocar FS; el
-     write lo gestiona HQ de forma controlada y auditada.
+3. Backend modular (cada módulo es una capa de la API, no una capability
+   de Runtime):
+   - content  (existente, read-only sobre git): board, adrs, principles,
+     reports, roadmap, state.
+   - workspace (nuevo, AJUSTE 1): capa intermedia entre Git y State.
+     Contiene conversaciones, reuniones, tareas, ideas y borradores.
+     NO es conocimiento oficial: vive en `hq/workspace/` (git-ignored)
+     con reglas de Safety MÁS LIGERAS que Git. Solo al "Promover"
+     (decisión explícita de usuario/equipo) pasa a Git (ADR/Tarea/
+     Principio/Informe/MEETING-*.md). Equivale al "borrador" del equipo.
+   - services (nuevo): estado de servicios, separado en DOS grupos
+     (AJUSTE 3):
+       ECOSYSTEM: Runtime, HQ, Horizon, Spotify, Ollama, Redis,
+                  Telegram... (nodos del ecosistema Horizon).
+       SYSTEM:    CPU, RAM, Discos, Red, Batería, Temperatura...
+                  (el portátil ES un nodo Horizon — AJUSTE 3).
+     v2a: solo lectura. v2c: control (start/stop/restart) bajo Safety.
+   - team     (nuevo): sala de reuniones permanente (conversaciones
+     Atlas/Hermes/Blanco + Horizon Agent futuro). "Promover" a
+     ADR/Tarea/Principio/Informe = mover de workspace a git.
+   - shell    (nuevo): dispatcher de la "Horizon Shell" (AJUSTE 5: consola
+     PROPIA con personalidad Horizon, NO un terminal Linux incrustado).
+     Comandos board/services/roadmap/report/freeze/approve. v2a: lectura.
+   - meetings (nuevo): agenda/conversación/decisiones/acciones +
+     generar MEETING-AAAA-MM-DD.md (pasa de workspace a git al guardar).
+   - settings (nuevo): lectura de config (Runtime/HQ/Horizon/Providers/
+     Services/Users/Auth). Escritura en fase posterior.
+   - projects (nuevo, AJUSTE 4): vista/gestión de MÚLTIPLES proyectos
+     del ecosistema (HQ no piensa solo en Runtime).
 
-5. Horizon Shell: consola propia del ecosistema, no un terminal Linux
-   incrustado. Mapea comandos a llamadas de API. Lectura en v2a.
+4. NUEVO PRINCIPIO (Atlas, 2026-07-19), amplía y fortalece ADR-0012:
+   "La interfaz nunca conoce dónde viven los datos. Solo conoce la API."
+   ⇒ El frontend (cualquier vista) ignora si un dato está en git, en
+     workspace, en state o en un servicio externo. Solo habla con /api/*.
 
-6. Estética = ZUB (ADR-0012 + Atlas): sobriedad, claridad, minimalismo,
-   profesionalidad. Tokens PROPIOS inspirados (no copiados) en
-   Linear/Raycast/GitHub/Vercel. Paleta dark con UN único acento
-   contenido. El comando palette (Raycast) y el keyboard-first son
-   principios de interacción.
+5. MODELO DE ESTADO (capas, AJUSTE 1):
+   Git (fuente única oficial)
+        │  lectura (read-only) — Safety OBLIGATORIA en write
+        ▼
+   Workspace (borradores del equipo: team/meetings/tareas/ideas)
+        │  reglas Safety MÁS LIGERAS
+        │  "Promover" -> pasa a Git (acción explícita + Safety)
+        ▼
+   State (puramente efímero: ventanas abiertas, sesión, terminal,
+          borradores de UI). Nunca persiste conocimiento.
+
+6. SAFETY (AJUSTE 2):
+   - Todo WRITE permanente hacia Git pasa OBLIGATORIAMENTE por Safety
+     (políticas análogas a command_runner: lista blanca, sin shell).
+   - Workspace puede tener reglas MÁS LIGERAS (es borrador, no oficial).
 
 7. Fases:
    - v2a (ESTE ENTREGABLE): arquitectura + wireframes + component tree +
-     navegación + estética. Sin código.
-   - v2b: implementación de la interfaz definitiva tras aprobación.
+     navegación + estética, con los 5 ajustes. Sin código.
+   - v2b: implementación de la interfaz definitiva tras congelación.
    - v2c: control de servicios (Safety).
-   - v2d: Horizon Shell con lenguaje natural.
+   - v2d: Horizon Shell con lenguaje natural + personalidad.
 
 ## Consecuencias
 - HQ crece más allá de la lectura de git; necesita un write-path
-  controlado para sus artefactos, con política de seguridad análoga a
-  command_runner (Safety) para acciones (start/stop, freeze/approve).
-- Runtime permanece intacto y congelado. HQ v2 es evolución de Horizon,
-  no de Runtime.
+  controlado para sus artefactos, con política de seguridad (Safety) para
+  acciones (promover, start/stop, freeze/approve).
+- Workspace introduce una zona de borrador no oficial, elevando la
+  separación conocimiento-oficial vs. trabajo-en-curso.
+- Runtime permanece intacto y congelado. HQ v2 es evolución de Horizon.
 - systemd arrancará Horizon (ADR-0012), no HQ directamente.
 
 ## Abierto para Atlas
-- ¿Almacén de Team/Meetings en `hq/.state/` (git-ignored) o en un store
-  local fuera del repo? Recomiendo `hq/.state/` git-ignored para portar
-  con el repo pero sin versionar ruido.
-- ¿Write-path de HQ bajo política Safety explícita (sí/no)?
+- ¿Almacén Team/Meetings en `hq/workspace/` (git-ignored) confirmado?
+- ¿Write-path de HQ bajo política Safety explícita (sí, confirmado)?

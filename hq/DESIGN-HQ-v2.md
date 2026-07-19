@@ -11,102 +11,101 @@
 ──────────────────────────────────────────
 - Git = fuente única de verdad para CONTENIDO. La API lo lee (read-only).
 - El Dashboard NUNCA toca el FS; todo pasa por el Backend (ADR-0012).
+- NUEVO PRINCIPIO (Atlas, 2026-07-19): "La interfaz nunca conoce dónde
+  viven los datos. Solo conoce la API." ⇒ El frontend ignora si un dato
+  está en git, workspace, state o servicio externo. Solo habla con /api/*.
 - Estética = ZUB: sobriedad, claridad, minimalismo, profesionalidad.
   Tokens propios inspirados en Linear/Raycast/GitHub/Vercel (no copiados).
   UN acento contenido. Interacción keyboard-first (estilo Raycast).
 - HQ v2 NO implementa capabilities de Runtime. Es evolución de Horizon.
 - Crecimiento guiado por uso (ADR-0012): v2a solo diseña; v2b implementa
-  tras aprobación.
+  tras congelación del diseño.
 
 ──────────────────────────────────────────
 1. ARQUITECTURA (capas)
 ──────────────────────────────────────────
-   Git (fuente única: hq/, src/)
-        │  lectura (read-only)
+   Git (fuente única oficial)
+        │  lectura (read-only) — Safety OBLIGATORIA en write
         ▼
-   HQ Backend (modular, /api/v2/*)        HQ State (hq/.state/, git-ignored)
-        │  lectura contenido                   │  estado vivo (Team/Meetings/
-        │                                      │  borradores, sesión)
-        ▼                                      ▲
-   API interna  ──────────────────────────────┘
+   HQ Backend (modular, /api/v2/*)        Workspace (hq/workspace/, git-ignored)
+        │  lectura contenido                   │  borradores del equipo
+        │                                      │  (team/meetings/tareas/ideas)
+        ▼                                      │  reglas Safety MÁS LIGERAS
+   API interna  ──────────────────────────────┘  "Promover" -> Git
         │
         ▼
    HQ v2 Frontend (SPA: navegación permanente + vistas)
+        └─ State (puramente efímero: ventanas, sesión, terminal)
 
 Módulos del Backend (cada uno = capa de API, NO capability Runtime):
   content   (existente)  board/adrs/principles/reports/roadmap/state
-  services  (nuevo)      estado de servicios (systemd user, spotify,
-                          ollama, redis, postgres, telegram...). v2a: solo
-                          lectura. v2c: control (start/stop/restart).
-  team      (nuevo)      conversaciones del equipo + "convertir" en
-                          ADR/Tarea/Principio/Informe (solo estructura).
-  shell     (nuevo)      dispatcher Horizon Shell (board/services/roadmap/
-                          report/freeze/approve...). v2a: solo lectura.
-  meetings  (nuevo)      agenda/conversación/decisiones/acciones +
-                          generar MEETING-AAAA-MM-DD.md (solo estructura).
-  settings  (nuevo)      lectura de config (Runtime/HQ/Horizon/Providers/
-                          Services/Users/Auth). Escritura en fase posterior.
+  workspace (nuevo)      borradores: team/meetings/tareas/ideas.
+                         NO oficial. "Promover" lo pasa a git (Safety).
+  services  (nuevo)      DOS grupos:
+       ECOSYSTEM: Runtime, HQ, Horizon, Spotify, Ollama, Redis, Telegram...
+       SYSTEM:    CPU, RAM, Discos, Red, Batería, Temperatura...
+       (el portátil ES un nodo Horizon)
+  team      (nuevo)      sala permanente; "promover" → ADR/Tarea/Principio/Informe
+  shell     (nuevo)      Horizon Shell PROPIA con personalidad (no Linux)
+  meetings  (nuevo)      agenda/conversación/decisiones/acciones + MEETING-*.md
+  projects  (nuevo)      MÚLTIPLES proyectos del ecosistema (no solo Runtime)
+  settings  (nuevo)      config (Runtime/HQ/Horizon/Providers/Services/Users/Auth)
+
+SAFETY (AJUSTE 2): todo write a Git OBLIGATORIO por Safety (lista blanca,
+sin shell). Workspace = reglas más ligeras (es borrador).
 
 ──────────────────────────────────────────
 2. ÁRBOL DE COMPONENTES
 ──────────────────────────────────────────
 App
-├─ Shell (layout permanente, keyboard-first)
-│   ├─ Sidebar (nav principal: Dashboard/Team/Terminal/Meetings/Roadmap/Settings)
-│   ├─ TopBar (búsqueda global ⌘K, perfil, estado de servicios mini)
+├─ Shell (layout permanente, keyboard-first, personalidad Horizon)
+│   ├─ Sidebar (nav: Dashboard/Team/Terminal/Meetings/Roadmap/Projects/Settings)
+│   ├─ TopBar (⌘K, perfil, mini-estado ECOSYSTEM/SYSTEM)
 │   └─ ViewContainer
 ├─ DashboardView
-│   ├─ StatusOverview (estado general del proyecto)
-│   ├─ BoardPanel (tablero por estado)
-│   ├─ RecentAdrs (ADRs recientes)
-│   ├─ PrinciplesStrip (principios)
-│   ├─ RoadmapPanel (activas)
-│   ├─ RecentReports (informes recientes)
-│   └─ ServicesPanel (NUEVO: Runtime/Spotify/Ollama/Redis/Postgres/Telegram)
-│       └─ ServiceTile (nombre, estado, acción futura: start/stop/restart)
+│   ├─ StatusOverview
+│   ├─ BoardPanel
+│   ├─ RecentAdrs
+│   ├─ PrinciplesStrip
+│   ├─ RoadmapPanel
+│   ├─ RecentReports
+│   └─ ServicesPanel (DOS grupos)
+│       ├─ EcosystemGroup (Runtime/HQ/Horizon/Spotify/Ollama/Redis/Telegram)
+│       └─ SystemGroup   (CPU/RAM/Discos/Red/Batería/Temperatura)
 ├─ TeamView
-│   ├─ ConversationList (hilos Atlas/Hermes/Blanco + Horizon Agent futuro)
-│   ├─ ConversationThread (mensajes del equipo)
-│   └─ PromoteMenu (convertir → ADR/Tarea/Principio/Informe) [v2a: mock]
+│   ├─ ConversationList (Atlas/Hermes/Blanco + Horizon Agent futuro)
+│   ├─ ConversationThread
+│   └─ PromoteMenu (→ ADR/Tarea/Principio/Informe) [v2a: mock]
 ├─ TerminalView
-│   └─ HorizonShell (consola propia; input + historia + salida formateada)
-│       ej: `board` `services` `roadmap` `report` `freeze` `approve`
+│   └─ HorizonShell (consola PROPIA con personalidad Horizon; input+historia+salida)
 ├─ MeetingsView
-│   ├─ AgendaPanel
-│   ├─ ConversationPanel
-│   ├─ DecisionsPanel
-│   ├─ ActionsPanel
+│   ├─ AgendaPanel ├─ ConversationPanel ├─ DecisionsPanel ├─ ActionsPanel
 │   └─ GenerateBtn → MEETING-AAAA-MM-DD.md [v2a: mock]
 ├─ RoadmapView
-│   └─ RoadmapBoard (activas + estado de flujo IDEA→ARCHIVADA)
+│   └─ RoadmapBoard
+├─ ProjectsView  (NUEVA, AJUSTE 4)
+│   ├─ ProjectList (múltiples proyectos del ecosistema)
+│   └─ ProjectDetail (estado, board, services por proyecto)
 └─ SettingsView
-    ├─ Section (Runtime)   ├─ Section (HQ)
-    ├─ Section (Horizon)   ├─ Section (Providers)
-    ├─ Section (Services)  ├─ Section (Users)
+    ├─ Section (Runtime) ├─ Section (HQ) ├─ Section (Horizon)
+    ├─ Section (Providers) ├─ Section (Services) ├─ Section (Users)
     └─ Section (Auth)
 
 ──────────────────────────────────────────
 3. NAVEGACIÓN Y FLUJO
 ──────────────────────────────────────────
-- Sidebar permanente: 6 entradas fijas. Estado activo resaltado.
-- ⌘K: paleta de comandos (Raycast) — salta a cualquier vista/sección/
-  servicio/ADR. Keyboard-first.
-- Dashboard es la pantalla por defecto al entrar.
-- Flujo típico:
-    entrar → Dashboard (visor general + Servicios)
-          → Team (lee charla del equipo; "promover" a ADR con un clic mock)
-          → Terminal (Horizon Shell: `roadmap`, `services`, `board`)
-          → Meetings (reunión → Generar MEETING-*.md mock)
-          → Roadmap (visor de estado)
-          → Settings (config centralizada, lectura)
-- Transiciones: SPA, sin recarga. Sin salir de Horizon para lo cotidiano.
-- v2c: desde ServicesPanel se podrá start/stop/restart (Safety).
-- v2d: Horizon Shell acepta lenguaje natural.
+- Sidebar permanente: 7 entradas (añadida Projects).
+- ⌘K: paleta (Raycast) — salta a vista/sección/servicio/ADR/proyecto.
+- Dashboard por defecto. Horizon Shell accesible en cualquier vista (⌘J).
+- Flujo: entrar → Dashboard (general + Servicios ECOSYSTEM/SYSTEM)
+  → Team (promover a ADR) → Terminal (Horizon Shell) → Meetings
+  (generar MEETING) → Roadmap → Projects (gestionar varios) → Settings.
+- Transiciones SPA. El portátil es un nodo Horizon más (SYSTEM).
 
 ──────────────────────────────────────────
 4. WIREFRAMES (ASCII)
 ──────────────────────────────────────────
-NAV PRINCIPAL (Sidebar)
+NAV PRINCIPAL (Sidebar, 7)
   ┌─────────────┐
   │ ◆ Horizon HQ│
   ├─────────────┤
@@ -115,86 +114,76 @@ NAV PRINCIPAL (Sidebar)
   │   Terminal  │
   │   Meetings  │
   │   Roadmap   │
+  │   Projects  │  (nuevo)
   │   Settings  │
   └─────────────┘   (⌘K paleta)
 
-DASHBOARD
+DASHBOARD — SERVICIOS (dos grupos)
   ┌──────────────────────────────────────────────┐
-  │ Horizon HQ            [⌘K buscar]   ● 6 svc   │
+  │ Horizon HQ            [⌘K]   ECOSYSTEM ●5 SYS ●4│
   ├──────────────────────────────────────────────┤
-  │ ESTADO GENERAL   [Runtime ●] [HQ ●] [Bloq ⚠]  │
+  │ ESTADO GENERAL   [Runtime ●] [HQ ●] [Bloq ⚠]   │
   ├──────────────────────┬───────────────────────┤
-  │ BOARD                 │ SERVICIOS             │
-  │ [EN CURSO] HQ-001     │ Runtime      ● UP     │
-  │ [CONGELADA] RTC-001   │ Spotify      ● UP     │
-  │ ...                   │ Ollama       ○ DOWN   │
-  │                       │ Redis        ○ DOWN   │
-  │                       │ Postgres     ○ DOWN   │
-  │                       │ Telegram     ● UP     │
-  ├──────────────────────┴───────────────────────┤
-  │ ADRs recientes │ Principios │ Roadmap │ Inf.  │
+  │ BOARD                 │ SERVICIOS              │
+  │ [EN REVISIÓN] HQ-001  │ ▸ ECOSYSTEM            │
+  │ [CONGELADA] RTC-001   │   Runtime   ● UP       │
+  │ ...                   │   HQ        ● UP       │
+  │                       │   Horizon   ○ DOWN     │
+  │                       │   Spotify   ● UP       │
+  │                       │   Ollama    ○ DOWN     │
+  │                       │   Redis     ○ DOWN     │
+  │                       │   Telegram  ● UP      │
+  │                       │ ▸ SYSTEM (nodo local)  │
+  │                       │   CPU 23%  RAM 41%     │
+  │                       │   Disc 60% Net ▲ Batería 88% T 54°C │
+  └──────────────────────┴───────────────────────┘
+
+PROJECTS (nueva vista)
+  ┌──────────────────────────────────────────────┐
+  │ PROJECTS                  [+ nuevo proyecto]   │
+  ├──────────────────────────────────────────────┤
+  │ ◆ runtime      [EN CURSO]   board · 12 adrs   │
+  │ ◇ horizon-dev  [IDEA]       sin board aún     │
+  │ ◇ doc-site     [PROPUESTA]  pendiente         │
   └──────────────────────────────────────────────┘
 
-TEAM (sala de reuniones permanente)
-  ┌────────────┬─────────────────────────────────┐
-  │ Hilos      │ Atlas · Hermes · Blanco         │
-  │ ─────      ├─────────────────────────────────┤
-  │ #arquitect │ > Atlas: elevamos HQ a Puente.. │
-  │ #runtime   │ > Hermes: ADR-0013 propuesto    │
-  │ #hq        │ [promover ▾] → ADR/Tarea/...    │
-  └────────────┴─────────────────────────────────┘
-
-TERMINAL (Horizon Shell)
+TERMINAL — Horizon Shell (con personalidad)
   ┌──────────────────────────────────────────────┐
-  │ horizon> board                               │
+  │ ◇ horizon ❯ board                            │
   │   HQ-001  EN REVISIÓN   infra coord          │
-  │   RTC-001 CONGELADA    music_player          │
-  │ horizon> services                              │
+  │ ◇ horizon ❯ services ecosystem               │
   │   Runtime UP · Spotify UP · Ollama DOWN       │
-  │ horizon> _                                    │
+  │ ◇ horizon ❯ _                                │
   └──────────────────────────────────────────────┘
+  (prompt propio "◇ horizon ❯"; no es bash)
 
-MEETINGS
-  ┌──────────┬──────────┬──────────┬─────────────┐
-  │ Agenda   │ Convers. │ Decisiones│ Acciones   │
-  │ · revisar│ > ...    │ D1: v2.. │ A1: ADR..  │
-  └──────────┴──────────┴──────────┴─────────────┘
-  [ Generar MEETING-2026-07-19.md ]
-
-SETTINGS (centralizado)
-  ┌──────────────────────────────────────────────┐
-  │ Runtime | HQ | Horizon | Providers | Services │
-  │ Users   | Auth                                 │
-  │ ───────────────────────────────────────────── │
-  │ [Runtime]  daemon: on · port: 8765            │
-  │ [HQ]      theme: dark · accent: ──            │
-  │ [Auth]    provider: spotify (reuse token)     │
-  └──────────────────────────────────────────────┘
+[Team / Meetings / Settings: igual que v1 pero con PromoteMenu y
+ grupos; véase árbol de componentes]
 
 ──────────────────────────────────────────
 5. ESTÉTICA (tokens propios, inspiración no copia)
 ──────────────────────────────────────────
-- Fondo: #0B0B0F (casi negro, leve azul). Superficie: #141419.
-- Borde: #23232B. Texto: #E6E6EA / mute #8A8A93.
-- Acento ÚNICO: #7C6CFF (índigo sobrio). Éxito #3FB950 · warn #E3B341 ·
-  error #F85149 · info #58A6FF.
-- Tipo: Inter (o sistema) peso 500 títulos / 400 cuerpo. Tracking -0.01em.
-- Radio 10px. Sombra: solo elevación sutil, sin glow.
-- Movimiento: transiciones 120–180ms ease-out. Sin espectacularidad.
-- Keyboard-first: ⌘K siempre disponible.
+- Fondo #0B0B0F · Superficie #141419 · Borde #23232B
+- Texto #E6E6EA / mute #8A8A93
+- Acento ÚNICO #7C6CFF · éxito #3FB950 · warn #E3B341 · error #F85149 · info #58A6FF
+- Tipo: Inter peso 500/400 · tracking -0.01em · radio 10px
+- Sombra solo elevación sutil · transiciones 120–180ms ease-out
+- Keyboard-first: ⌘K (paleta) y ⌘J (Horizon Shell) siempre disponibles
+- Personalidad Horizon: micro-copys propios ("◇ horizon ❯"), sin estética
+  de terminal Linux.
 
 ──────────────────────────────────────────
-6. FASES (cronograma de construcción)
+6. FASES (cronograma)
 ──────────────────────────────────────────
-  v2a  este entregable (diseño)
-  v2b  implementación interfaz definitiva (tras aprobación)
-  v2c  control de servicios (Safety, write-path)
-  v2d  Horizon Shell con lenguaje natural
-  (systemd arrancará Horizon, que levanta HQ — ADR-0012)
+  v2a  este entregable (diseño con 5 ajustes de Atlas)
+  v2b  implementación interfaz definitiva (tras congelar diseño)
+  v2c  control de servicios (Safety)
+  v2d  Horizon Shell con lenguaje natural + personalidad
 
 ──────────────────────────────────────────
 7. ABIERTO PARA ATLAS
 ──────────────────────────────────────────
-- ¿Almacén Team/Meetings en hq/.state/ (git-ignored) o store externo?
-- ¿Write-path de HQ bajo política Safety explícita (sí/no)?
-- ¿ServiciosPanel muestra solo los del ecosistema o también del SO?
+- ¿Almacén Team/Meetings en hq/workspace/ (git-ignored) confirmado?
+- (Safety explícita: confirmada por Atlas.)
+- ¿Projects: ¿un proyecto = un repo git, o una carpeta lógica dentro de
+  runtime? Recomiendo: cada proyecto apunta a su propia fuente git.
