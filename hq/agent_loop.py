@@ -28,7 +28,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 STATE = REPO / "hq" / "workspace" / "agent_state.json"
 API = "http://127.0.0.1:8765/api/v2/team"
-POLL = 4.0  # segundos
+POLL = 1.5  # segundos
 
 
 def _http(method: str, path: str, payload: dict | None = None) -> dict:
