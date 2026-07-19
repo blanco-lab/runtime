@@ -48,7 +48,11 @@ Módulos del Backend (cada uno = capa de API, NO capability Runtime):
   team      (nuevo)      sala permanente; "promover" → ADR/Tarea/Principio/Informe
   shell     (nuevo)      Horizon Shell PROPIA con personalidad (no Linux)
   meetings  (nuevo)      agenda/conversación/decisiones/acciones + MEETING-*.md
-  projects  (nuevo)      MÚLTIPLES proyectos del ecosistema (no solo Runtime)
+  projects  (nuevo)      MÚLTIPLES proyectos del ecosistema (NO carpetas de
+                         runtime). Cada proyecto = su propio repo git; HQ los
+                         conoce/consulta/coordina, no los contiene. Futuro:
+                         lee project.yaml de identidad (nombre/tipo/versión/
+                         estado/responsable/deps/repo) — HQ nunca lo deduce.
   settings  (nuevo)      config (Runtime/HQ/Horizon/Providers/Services/Users/Auth)
 
 SAFETY (AJUSTE 2): todo write a Git OBLIGATORIO por Safety (lista blanca,

@@ -1,8 +1,8 @@
 # ADR-0013 — HQ v2 "Puente de Mando": arquitectura del centro de operaciones
 
-- Estado: APROBADA CON AJUSTES (Atlas, 2026-07-19). Pendiente de aplicar
-  los 5 ajustes en este mismo ADR y en DESIGN-HQ-v2, luego congelar
-  diseño y pasar a v2b. HQ Serve v1 sigue CONGELADA (ADR-0012).
+- Estado: CERRADA (Atlas, 2026-07-19). Diseño congelado. Aprobada con
+  ajustes y decisión de Projects. Lista para implementación v2b. HQ Serve
+  v1 sigue CONGELADA (ADR-0012).
 - Autor: Hermes · 2026-07-19
 
 ## Contexto
@@ -106,5 +106,27 @@ de Runtime; HQ v2 es Horizon HQ, no Runtime.
 - systemd arrancará Horizon (ADR-0012), no HQ directamente.
 
 ## Abierto para Atlas
-- ¿Almacén Team/Meetings en `hq/workspace/` (git-ignored) confirmado?
-- ¿Write-path de HQ bajo política Safety explícita (sí, confirmado)?
+- ¿Almacén Team/Meetings en `hq/workspace/` (git-ignored) confirmado? **SÍ.**
+- ¿Write-path de HQ bajo política Safety explícita? **SÍ (confirmado).**
+
+## DECISIÓN DE PROJECTS (Atlas, 2026-07-19) — cierra la pregunta abierta
+- Projects NO representa carpetas del repo Runtime. Representa PROYECTOS
+  DEL ECOSISTEMA.
+- Cada proyecto tiene SU PROPIO repositorio Git. HQ los **conoce, consulta
+  y coordina**, pero NO los contiene.
+- Ejemplo futuro: Runtime · Horizon Agent · HQ · SDK · Plugins · Website ·
+  Documentation — cada uno independiente.
+- Por tanto, la vista Projects apunta a fuentes git externas (no a
+  subdirectorios de runtime). HQ es orquestador, no monorepo.
+
+## EVOLUCIÓN FUTURA (registrada, NO implementar aún)
+- Cada proyecto podrá contener un pequeño archivo de identidad
+  `project.yaml`. HQ lo leerá automáticamente para conocer: nombre, tipo,
+  versión, estado, responsable, descripción, dependencias, repositorio.
+- Principio: HQ NUNCA deduce esa información; la lee del archivo de
+  identidad del proyecto. (Refuerza el principio "la interfaz solo conoce
+  la API": el dato vive en el repo del proyecto, HQ lo consulta vía API.)
+
+## CIERRE
+ADR-0013 CERRADA (2026-07-19). Sin más cambios de arquitectura. Siguiente
+paso: implementación de HQ v2 (v2b) y aprendizaje por uso real.
