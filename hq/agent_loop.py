@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-"""Hermes Agent Loop — conecta a Horizon HQ (HQ-003).
+"""Hermes Agent Loop — Hermes real conectado a Horizon HQ (HQ-003).
 
 Proceso background que hace de Hermes dentro de la sala "Horizon Team":
   - sondea GET /api/v2/team/messages
-  - responde a los mensajes nuevos de Blanco (no de Hermes) posteando como Hermes
-  - NO escribe en git salvo promoción explícita (la hace el usuario desde la UI)
+  - ante un mensaje nuevo de Blanco (no de Hermes), invoca al motor REAL de
+    Hermes (`hermes -z --safe-mode`, usa la credential de Nous ya configurada,
+    gratuito) y postea la respuesta en la sala como Hermes.
+  - NO ejecuta acciones: --safe-mode limita a razonamiento + texto.
+  - NO escribe en git salvo promoción explícita del usuario desde la UI.
 
-Principio ZUB: un solo sitio de trabajo. Blanco escribe en HQ; Hermes responde
-en HQ. El cartero desaparece.
+Fin del cartero: Blanco escribe solo en HQ; Hermes contesta solo en HQ.
 
-Uso:  hq agent            (arranca el bucle; Ctrl+C para parar)
-       hq agent --once    (una pasada, útil para test)
-
-No requiere APIs de pago. 100% local/gratuito.
+Uso:  hq agent          (bucle 24/7; Ctrl+C para parar)
+       hq agent --once  (una pasada, test)
 """
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import subprocess
 import sys
 import time
 import urllib.request
@@ -26,7 +28,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 STATE = REPO / "hq" / "workspace" / "agent_state.json"
 API = "http://127.0.0.1:8765/api/v2/team"
-POLL = 3.0  # segundos
+POLL = 4.0  # segundos
 
 
 def _http(method: str, path: str, payload: dict | None = None) -> dict:
@@ -53,32 +55,49 @@ def _save_seen(seen: set[str]):
     STATE.write_text(json.dumps({"seen": sorted(seen)}))
 
 
-def _respond(text: str) -> str:
-    """Criterio de Hermes. Por ahora: acuse + eco con personalidad.
-    Aquí es donde en el futuro entraría el razonamiento real de Hermes
-    (esta sesión). Hoy devuelve una respuesta útil y honesta."""
-    t = text.strip().lower()
-    if any(k in t for k in ["hola", "buenas", "hey"]):
-        return "Hermes por aquí. Recibido en la sala. ¿En qué trabajamos?"
-    if "cartero" in t:
-        return "El cartero es historia: lees y escribes solo en Horizon HQ. Yo contesto aquí."
-    return f"Entendido, Blanco. Anotado en la sala: «{text[:80]}». Dime y actúo."
+SYSTEM = (
+    "Eres Hermes, conectado a la sala 'Horizon Team' de Horizon HQ. "
+    "Blanco (tu usuario) escribió en la sala. Responde de forma útil, "
+    "concisa y en español (tú, singular). No uses markdown de botones. "
+    "Si la petición requiere ejecutar acciones en su equipo, díselo y "
+    "propón el paso, pero no inventes resultados."
+)
+
+
+def _hermes_think(text: str) -> str:
+    """Invoca al motor real de Hermes (gratuito, credential Nous ya configurada)."""
+    hermes = shutil.which("hermes")
+    if not hermes:
+        return "[Hermes] motor no disponible (hermes CLI no encontrado)."
+    prompt = f"{SYSTEM}\n\nMensaje de Blanco:\n{text}\n\nRespuesta de Hermes:"
+    try:
+        r = subprocess.run(
+            [hermes, "-z", prompt, "--safe-mode", "--cli"],
+            capture_output=True, text=True, timeout=180,
+        )
+        out = (r.stdout or "").strip()
+        if not out and r.stderr.strip():
+            out = f"[Hermes] error motor: {r.stderr.strip()[:200]}"
+        return out or "[Hermes] (sin respuesta del motor)"
+    except subprocess.TimeoutExpired:
+        return "[Hermes] tardé demasiado en responder; reintenta."
+    except Exception as e:
+        return f"[Hermes] fallo al invocar motor: {e}"
 
 
 def loop(once: bool = False):
     seen = _load_seen()
     while True:
         try:
-            d = _http("GET", "/messages")
-            msgs = d.get("messages", [])
+            msgs = _http("GET", "/messages").get("messages", [])
             nuevos = [m for m in msgs if m["id"] not in seen
                       and m["author"] != "Hermes"]
             for m in nuevos:
                 seen.add(m["id"])
-                resp = _respond(m["text"])
+                resp = _hermes_think(m["text"])
                 _http("POST", "/messages",
                       {"author": "Hermes", "text": resp, "parent_id": m["id"]})
-                print(f"[agent] Blanco escribió -> Hermes respondió en sala",
+                print(f"[agent] Blanco -> Hermes respondió ({len(resp)} chars)",
                       flush=True)
             _save_seen(seen)
         except Exception as e:
@@ -89,10 +108,10 @@ def loop(once: bool = False):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Hermes Agent Loop (HQ Team)")
+    ap = argparse.ArgumentParser(description="Hermes Agent Loop (HQ Team, motor real)")
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
-    print("[agent] Hermes conectado a Horizon Team. Fin del cartero.", flush=True)
+    print("[agent] Hermes REAL conectado a Horizon Team. Fin del cartero.", flush=True)
     try:
         loop(once=args.once)
     except KeyboardInterrupt:
