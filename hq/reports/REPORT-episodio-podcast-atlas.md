@@ -61,15 +61,40 @@ La interfaz `play(query)` NO cambia. Solo evoluciona SpotifyBackend:
 - Capability Freeze: music_player NO cambia de interfaz. Solo su backend.
 - Reutilización de auth (ADR-0008): sigue usando el token existente.
 
+## Listado de capítulos (paginado hacia atrás en el tiempo)
+
+Blanco quiere también poder pedir el listado y navegarlo. Comportamiento:
+
+- "quiero oír el podcast de Monos Estocásticos" -> Horizon/Runtime lista
+  los 10 ÚLTIMOS publicados.
+- "más" -> lista los SIGUIENTES 10 (los publicados justo antes de esos),
+  y así sucesivamente. Paginación hacia atrás en el histórico.
+
+Implementación (Web API: GET /shows/{id}/episodes con limit=10 y
+offset=N). Cada "más" suma 10 al offset. Lista numerada para que luego
+el usuario diga "pon el 7" o "pon el capítulo 24" y vaya directo.
+
+Matiz de arquitectura (registrado):
+- La primitiva list_episodes(show, limit=10, offset=0) es del BACKEND
+  (lectura; no toca la Capability congelada). Se implementa ya en Runtime.
+- El "más" que RECUERDA dónde quedó y sigue bajando requiere ESTADO entre
+  llamadas. Runtime hoy es stateless (cada frase = disparo). Esa
+  paginación conversacional natural es comportamiento de HORIZON (contexto
+  conversacional, VISION-horizon.md). La primitiva queda lista para él.
+
 ## Alcance mínimo propuesto
 
 - SpotifyWebApiTransport.play_episode(episode_uri) (ya casi igual que
   play_show).
+- SpotifyWebApiTransport.list_episodes(show_id, limit=10, offset=0)
+  -> devuelve episodios con título, fecha y ordinal.
 - SpotifyBackend: heurística de "título de episodio" y "número de
   capítulo"; búsqueda de episodes del show; selección por ordinal literal
-  y por similitud de título.
-- Tests: caso "episodio 24" (ordinal literal) y "título con typo" (más
-  parecido), sin red (mock de episodes).
+  y por similitud de título; heurística de "lista/los capítulos/muestra
+  episodios" que usa list_episodes.
+- Tests (sin red): "episodio 24" (ordinal literal), "título con typo"
+  (más parecido), y list_episodes devuelve 10 con offset 0 y soporta
+  offset+10.
 
 ## Petición
 
