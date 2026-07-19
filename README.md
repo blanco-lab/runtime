@@ -47,10 +47,18 @@ Runtime y Horizon minimizan sistemáticamente la carga sobre el usuario:
 autodescubrir → reutilizar → autoconfigurar → preguntar solo si no hay
 alternativa segura. Ver: `hq/principles/PRINCIPLE-0001-ZUB.md`.
 
-### Visión a largo plazo: Runtime (la Shell) y Horizon (el Ghost)
+### Visión a largo plazo: tres capas
 
-Runtime es el motor de ejecución; Horizon será el agente permanente que
-lo usa. Ver: `hq/VISION-horizon.md`.
+El proyecto se organiza en tres capas distintas (ADR-0011):
+
+- **Runtime** — motor de ejecución (capabilities, stateless).
+- **Horizon Agent** — agente conversacional con memoria, planificación y contexto.
+- **Horizon HQ** — sistema de coordinación del equipo (tareas, decisiones,
+  principios, estado, revisiones, bloqueos, responsables). Es el "SO del
+  equipo"; la documentación es consecuencia, no finalidad. Consulta:
+  `hq/board.md`, `hq/DESIGN-HQ.md`. Dashboard: `hq serve` (en diseño).
+
+Ver también: `hq/VISION-horizon.md`, `hq/decisions/ADR-0011-horizon-hq.md`.
 
 ### Verificación
 
