@@ -10,5 +10,9 @@ venv/
 .DS_Store
 *.swp
 
+# HQ workspace (borradores del equipo: ADR-0013). NO versionado: vive
+# fuera de la fuente oficial; solo se promueve a Git de forma explícita.
+hq/workspace/
+
 # Local verification scripts
 hermes-verify-*.py
