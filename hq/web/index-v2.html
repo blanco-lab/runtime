@@ -159,6 +159,7 @@ const V={
       </div>
       <div class="ph">Promueve cualquier mensaje a ADR / Tarea / Principio / Informe / Decisión (Workspace → Git, Safety).</div></div>`;
     const box=$("#msgs");
+    const scrollEnd=()=>{box.scrollTop=box.scrollHeight;};
     const render=async()=>{
       const d=await api("/api/v2/team/messages");
       const ms=d.messages||[];
@@ -183,11 +184,14 @@ const V={
       // marcar leídos
       const nuevos=ms.filter(m=>!m.read).map(m=>m.id);
       if(nuevos.length)await fetch("/api/v2/team/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:nuevos})});
+      scrollEnd();
     };
     const send=async()=>{const t=$("#msg").value.trim();if(!t)return;await fetch("/api/v2/team/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({author:"Blanco",text:t})});$("#msg").value='';render();};
     $("#send").onclick=send;
     $("#msg").addEventListener("keydown",e=>{if(e.key==='Enter')send();});
     render();
+    stopPoll();
+    _pollTimer=setInterval(render,3000);
   },
   async terminal(c){
     c.innerHTML=`<div class="panel"><h2>Horizon Shell</h2>
@@ -219,7 +223,11 @@ const V={
   async settings(c){c.innerHTML=`<div class="panel"><h2>Settings</h2><div class="ph">Runtime · HQ · Horizon · Providers · Services · Users · Auth (próxima iteración)</div></div>`;}
 };
 
+let _pollTimer=null;
+function stopPoll(){if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}}
+
 async function show(v){
+  stopPoll();
   $("#vt").textContent=views[v];
   $$(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===v));
   const c=$("#content");c.innerHTML='<div class="ph">cargando…</div>';
