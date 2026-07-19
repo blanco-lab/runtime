@@ -39,6 +39,7 @@ from ....auth.credentials import (
 )
 from ....auth import AuthManager
 from ....auth.providers import SpotifyProvider
+from ....domain import EntityType, DomainEntity, Listing
 
 
 def _run_cli(args: list[str], retries: int = 3) -> subprocess.CompletedProcess:
@@ -114,8 +115,9 @@ class SpotifyBackend(Backend):
     def search_episode(self, show_id: str, query: str) -> list[dict]:
         return self._api().search_episode(show_id, query)
 
-    def list_episodes(self, show_id: str, limit: int = 10, offset: int = 0) -> dict:
-        return self._api().list_episodes(show_id, limit, offset)
+    # NOTA: list_episodes de dominio (devuelve Listing) está definido más
+    # abajo, en la sección "Dominio de catálogo". El BackendDispatcher y el
+    # Executor lo consumen vía Listing.items / Listing.total.
 
     # --- compatibilidad: play(query) sigue siendo la entrada de la Capability ---
     # NOTA: aquí el backend hace un enrutado mínimo track-vs-show SOLO para
@@ -179,6 +181,45 @@ class SpotifyBackend(Backend):
         p = max(0, min(100, int(percent)))
         return self._simple(["playback", "volume", str(p)], f"Volumen {p}%.")
 
+    # --- Modelo de dominio (ADR-0010): proveedor-agnóstico, objetos efímeros ---
+
+    def list_tracks(self, album_id: str, limit: int = 50, offset: int = 0) -> Listing:
+        """Canciones de un album (DomainProvider)."""
+        data = self._api().list_tracks(album_id, limit, offset)
+        items = [DomainEntity(id=e["id"], uri=e["uri"], name=e["name"],
+                             entity_type=EntityType.TRACK, extra=e.get("extra", {}))
+                 for e in data.get("items", [])]
+        return Listing(entity_type=EntityType.TRACK, items=items,
+                      total=data.get("total", len(items)), offset=offset, query="")
+
+    def list_albums(self, artist_id: str, limit: int = 10, offset: int = 0) -> Listing:
+        """Albums de un artista (DomainProvider)."""
+        data = self._api().list_albums(artist_id, limit, offset)
+        items = [DomainEntity(id=e["id"], uri=e["uri"], name=e["name"],
+                             entity_type=EntityType.ALBUM, extra=e.get("extra", {}))
+                 for e in data.get("items", [])]
+        return Listing(entity_type=EntityType.ALBUM, items=items,
+                      total=data.get("total", len(items)), offset=offset, query="")
+
+    def list_episodes(self, show_id: str, limit: int = 10, offset: int = 0) -> Listing:
+        """Episodios de un show (DomainProvider)."""
+        data = self._api().list_episodes(show_id, limit, offset)
+        items = [DomainEntity(id=e["id"], uri=e["uri"], name=e["name"],
+                             entity_type=EntityType.EPISODE, extra=e.get("extra", {}))
+                 for e in data.get("items", [])]
+        return Listing(entity_type=EntityType.EPISODE, items=items,
+                      total=data.get("total", len(items)), offset=offset, query="")
+
+    def search(self, entity_type, query: str, limit: int = 10) -> Listing:
+        """Busca entidades de un tipo en el dominio (DomainProvider)."""
+        t = EntityType(entity_type)
+        data = self._api().search(str(t.value), query, limit)
+        items = [DomainEntity(id=e["id"], uri=e["uri"], name=e["name"],
+                             entity_type=t, extra=e.get("extra", {}))
+                 for e in data.get("items", [])]
+        return Listing(entity_type=t, items=items, total=data.get("total", len(items)),
+                      offset=0, query=query)
+
 
 # Reexport para no romper importaciones existentes (compatibilidad).
 SpotifyPlayerBackend = SpotifyBackend
@@ -204,6 +245,10 @@ class BackendDispatcher:
         if kind == "search_episode":
             return {"ok": True, "items": self.b.search_episode(req["show_id"], req["query"])}
         if kind == "list_episodes":
-            return self.b.list_episodes(req["show_id"], req.get("limit", 10),
-                                        req.get("offset", 0))
+            listing = self.b.list_episodes(req["show_id"], req.get("limit", 10),
+                                           req.get("offset", 0))
+            return {"ok": True, "data": {
+                "items": [{"uri": i.uri, "name": i.name} for i in listing.items],
+                "total": listing.total,
+            }}
         return {"ok": False, "message": f"Primitiva desconocida: {kind}"}

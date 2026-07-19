@@ -24,6 +24,7 @@ import json
 import shutil
 import subprocess
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Callable
 
@@ -167,7 +168,7 @@ class SpotifyWebApiTransport:
         listing = self.list_episodes(show_id, limit=50, offset=0)
         if not listing.get("ok"):
             return []
-        return [e for e in listing["data"]["items"]
+        return [e for e in listing["items"]
                 if query.lower() in (e.get("name") or "").lower()]
 
     def list_episodes(self, show_id: str, limit: int = 10, offset: int = 0) -> dict:
@@ -175,4 +176,54 @@ class SpotifyWebApiTransport:
         r = self._get(url)
         if not r.get("ok"):
             return r
-        return {"ok": True, "data": r["data"]}
+        # El backend envuelve en Listing; aquí devolvemos el formato crudo
+        # que espera el backend (items + total), no anidado.
+        raw = r["data"].get("items", [])
+        return {"ok": True, "items": [self._norm(e, "episode") for e in raw],
+                "total": r["data"].get("total", len(raw))}
+
+    def search(self, entity_type: str, query: str, limit: int = 10) -> dict:
+        """Búsqueda genérica de catálogo (type=album|artist|track|playlist|
+        show|episode). Devuelve {"items":[{id,uri,name,extra}], "total"}."""
+        url = f"{self.BASE}/search?type={entity_type}&q={urllib.parse.quote(query)}&limit={limit}"
+        r = self._get(url)
+        if not r.get("ok"):
+            return r
+        # Spotify anida bajo la clave del tipo (ej. "albums", "tracks").
+        key = entity_type + "s" if not entity_type.endswith("y") else entity_type[:-1] + "ies"
+        bucket = r["data"].get(key, r["data"].get(entity_type, {}))
+        raw = bucket.get("items", []) if isinstance(bucket, dict) else []
+        total = bucket.get("total", len(raw)) if isinstance(bucket, dict) else len(raw)
+        items = [self._norm(e, entity_type) for e in raw]
+        return {"ok": True, "items": items, "total": total}
+
+    def list_tracks(self, album_id: str, limit: int = 50, offset: int = 0) -> dict:
+        url = f"{self.BASE}/albums/{album_id}/tracks?limit={limit}&offset={offset}"
+        r = self._get(url)
+        if not r.get("ok"):
+            return r
+        raw = r["data"].get("items", [])
+        items = [self._norm(e, "track") for e in raw]
+        return {"ok": True, "items": items, "total": r["data"].get("total", len(raw))}
+
+    def list_albums(self, artist_id: str, limit: int = 10, offset: int = 0) -> dict:
+        url = f"{self.BASE}/artists/{artist_id}/albums?limit={limit}&offset={offset}"
+        r = self._get(url)
+        if not r.get("ok"):
+            return r
+        raw = r["data"].get("items", [])
+        items = [self._norm(e, "album") for e in raw]
+        return {"ok": True, "items": items, "total": r["data"].get("total", len(raw))}
+
+    @staticmethod
+    def _norm(e: dict, entity_type: str) -> dict:
+        """Normaliza un item crudo de Spotify al formato interno."""
+        uri = e.get("uri", "")
+        name = e.get("name", "")
+        eid = e.get("id", "")
+        extra = {}
+        if entity_type in ("track", "album") and "artists" in e:
+            extra["artists"] = [a.get("name", "") for a in e["artists"]]
+        if entity_type == "album" and "release_date" in e:
+            extra["release_date"] = e["release_date"]
+        return {"id": eid, "uri": uri, "name": name, "extra": extra}

@@ -43,12 +43,13 @@ def _mock_backend(episodes):
         play_show=lambda u: {"ok": True, "message": f"show {u}"},
         play_episode=lambda u: {"ok": True, "message": f"ep {u}"},
         search_episode=lambda sid, q: [e for e in episodes if q.lower() in e["name"].lower()],
-        list_episodes=lambda sid, lim, off: {"ok": True, "data": {
+        list_episodes=lambda sid, lim, off: {
+            # Formato del transporte real: {items, total} (no anidado).
             "total": len(episodes),
             # La Web API devuelve del MÁS RECIENTE al más viejo; el mock
             # invierte para simular ese orden (episodes[0] = E1 más antiguo).
             "items": episodes[::-1][off:off + lim],
-        }},
+        },
     )
     return bk
 
@@ -78,7 +79,8 @@ def main() -> int:
     ok = ok and understand("pon musica de manolo garcia").label == "play_music"
 
     print("\n== Executor: resuelve primitiva correcta (sin red) ==")
-    episodes = [{"name": f"Ep {n}", "uri": f"spotify:episode:E{n}"} for n in range(1, 31)]
+    episodes = [{"name": f"Ep {n}", "uri": f"spotify:episode:E{n}", "id": f"E{n}"}
+                for n in range(1, 31)]
     bk = _mock_backend(episodes)
     with mock.patch("src.core.capabilities.music_player._default_backend",
                     return_value=bk):

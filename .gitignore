@@ -12,3 +12,7 @@ venv/
 
 # Local verification scripts
 hermes-verify-*.py
+
+# Obsoleto: módulo renombrado a src/core/domain/ (ADR-0010). Mantenido
+# como respaldo reversible hasta confirmación de borrado.
+src/core/catalog/

@@ -59,7 +59,9 @@ def _fake_http(flag):
         # GET: list_episodes
         m = re.search(r"offset=(\d+)", req.full_url)
         base = int(m.group(1)) if m else 0
-        items = [{"name": f"Ep {base + i} - Atom", "offset": base + i}
+        items = [{"name": f"Ep {base + i} - Atom",
+                  "id": f"EP{base + i}",
+                  "uri": f"spotify:episode:EP{base + i}"}
                  for i in range(10)]
         body = json.dumps({"items": items}).encode()
         resp = mock.MagicMock()
@@ -133,7 +135,7 @@ def main() -> int:
     bk._http = _fake_http(cap3)
     disp = __import__("src.core.capabilities.music_player.backends.spotify_player",
                       fromlist=["BackendDispatcher"]).BackendDispatcher(bk)
-    # list_episodes devuelve items con offset (paginación hacia atrás).
+    # list_episodes devuelve items (paginación hacia atrás vía offset).
     show_id = "SHOW123"
     list0 = disp.dispatch({"kind": "list_episodes", "show_id": show_id,
                            "limit": 10, "offset": 0})
@@ -141,7 +143,11 @@ def main() -> int:
     # "más" -> offset 10 (Horizon recordaría el offset; aquí lo pasamos)
     list10 = disp.dispatch({"kind": "list_episodes", "show_id": show_id,
                             "limit": 10, "offset": 10})
-    ok = ok and list10.get("ok") is True and list10["data"]["items"][0]["offset"] == 10
+    ok = ok and list10.get("ok") is True and len(list10["data"]["items"]) == 10
+    # Paginación real: el contenido de offset 10 es distinto al de offset 0.
+    names0 = [i["name"] for i in list0["data"]["items"]]
+    names10 = [i["name"] for i in list10["data"]["items"]]
+    ok = ok and names0 != names10
     print("  [OK]" if ok else "  [FAIL]",
           "list_episodes con limit/offset (paginación hacia atrás)")
 
