@@ -9,7 +9,8 @@ Proceso background que hace de Hermes dentro de la sala "Horizon Team":
   - NO ejecuta acciones: --safe-mode limita a razonamiento + texto.
   - NO escribe en git salvo promoción explícita del usuario desde la UI.
 
-Fin del cartero: Blanco escribe solo en HQ; Hermes contesta solo en HQ.
+Robusto: cualquier fallo se registra y el bucle sigue vivo (no crashea el
+servicio). Logs en hq/workspace/agent.log (git-ignored).
 
 Uso:  hq agent          (bucle 24/7; Ctrl+C para parar)
        hq agent --once  (una pasada, test)
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import shutil
 import subprocess
 import sys
@@ -26,9 +28,18 @@ import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-STATE = REPO / "hq" / "workspace" / "agent_state.json"
+WORKSPACE = REPO / "hq" / "workspace"
+STATE = WORKSPACE / "agent_state.json"
+LOG = WORKSPACE / "agent.log"
 API = "http://127.0.0.1:8765/api/v2/team"
-POLL = 1.5  # segundos
+POLL = 5.0  # segundos
+THINK_TIMEOUT = 150  # s
+
+logging.basicConfig(
+    filename=str(LOG), level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+log = logging.getLogger("hq-agent")
 
 
 def _http(method: str, path: str, payload: dict | None = None) -> dict:
@@ -72,16 +83,22 @@ def _hermes_think(text: str) -> str:
     prompt = f"{SYSTEM}\n\nMensaje de Blanco:\n{text}\n\nRespuesta de Hermes:"
     try:
         r = subprocess.run(
-            [hermes, "-z", prompt, "--safe-mode", "--cli"],
-            capture_output=True, text=True, timeout=180,
+            [hermes, "-z", prompt, "--safe-mode"],
+            capture_output=True, text=True, timeout=THINK_TIMEOUT,
         )
         out = (r.stdout or "").strip()
-        if not out and r.stderr.strip():
-            out = f"[Hermes] error motor: {r.stderr.strip()[:200]}"
-        return out or "[Hermes] (sin respuesta del motor)"
+        if not out:
+            # fallback: a veces el modelo escribe en stderr o hay aviso
+            out = (r.stderr or "").strip().splitlines()
+            out = [l for l in out if l and "warn" not in l.lower()][:1]
+            out = out[0] if out else ""
+        if not out:
+            return "[Hermes] (sin respuesta del motor; reintenta)"
+        return out
     except subprocess.TimeoutExpired:
         return "[Hermes] tardé demasiado en responder; reintenta."
     except Exception as e:
+        log.exception("hermes_think fallo")
         return f"[Hermes] fallo al invocar motor: {e}"
 
 
@@ -94,14 +111,16 @@ def loop(once: bool = False):
                       and m["author"] != "Hermes"]
             for m in nuevos:
                 seen.add(m["id"])
-                resp = _hermes_think(m["text"])
-                _http("POST", "/messages",
-                      {"author": "Hermes", "text": resp, "parent_id": m["id"]})
-                print(f"[agent] Blanco -> Hermes respondió ({len(resp)} chars)",
-                      flush=True)
+                try:
+                    resp = _hermes_think(m["text"])
+                    _http("POST", "/messages",
+                          {"author": "Hermes", "text": resp, "parent_id": m["id"]})
+                    log.info("Blanco -> Hermes respondió (%d chars)", len(resp))
+                except Exception:
+                    log.exception("error al responder mensaje %s", m["id"])
             _save_seen(seen)
-        except Exception as e:
-            print(f"[agent] error sondeo: {e}", flush=True)
+        except Exception:
+            log.exception("error en sondeo")
         if once:
             break
         time.sleep(POLL)
@@ -111,11 +130,11 @@ def main():
     ap = argparse.ArgumentParser(description="Hermes Agent Loop (HQ Team, motor real)")
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
-    print("[agent] Hermes REAL conectado a Horizon Team. Fin del cartero.", flush=True)
+    log.info("Hermes REAL conectado a Horizon Team. Fin del cartero.")
     try:
         loop(once=args.once)
     except KeyboardInterrupt:
-        print("\n[agent] detenido.")
+        log.info("detenido")
 
 
 if __name__ == "__main__":
