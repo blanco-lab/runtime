@@ -17,6 +17,7 @@ SUITE = [
     "test_command_runner.py",
     "test_music_player.py",
     "test_auth.py",
+    "test_spotify_backend.py",
 ]
 
 
