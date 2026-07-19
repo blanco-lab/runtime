@@ -64,6 +64,23 @@ button{font-family:inherit;cursor:pointer}
 .shell input{background:transparent;border:0;color:var(--txt);font-family:var(--mono);font-size:12.5px;outline:none;width:calc(100% - 90px)}
 .ph{color:var(--txt3);font-style:italic;font-size:12px;padding:8px 2px;border:1px dashed var(--line2);
   border-radius:8px;text-align:center;margin-top:8px}
+.msgs{display:flex;flex-direction:column;gap:9px;max-height:360px;overflow:auto;margin-bottom:12px}
+.msg{background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+.msg.unread{border-left:3px solid var(--accent)}
+.msg .mh{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt2);margin-bottom:5px}
+.msg .au{font-weight:600;color:var(--txt)}
+.msg .ru{color:var(--accent);font-size:9px}.msg .r{color:var(--txt3);font-size:9px}
+.msg .mt{font-size:13px;color:var(--txt);white-space:pre-wrap}
+.msg .mact{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+.msg .mact button{background:var(--bg2);border:1px solid var(--line2);color:var(--txt2);
+  border-radius:6px;padding:3px 9px;font-size:11px}
+.msg .mact button:hover{border-color:var(--accent);color:var(--accent)}
+.composer{display:flex;gap:8px}
+.composer input{flex:1;background:var(--bg3);border:1px solid var(--line);border-radius:8px;
+  padding:10px 12px;color:var(--txt);font-family:inherit;font-size:13px;outline:none}
+.composer input:focus{border-color:var(--accent)}
+.composer button{background:var(--accent);border:0;color:#0B0B0F;border-radius:8px;
+  padding:0 18px;font-weight:600;font-size:13px}
 .footer{margin-top:34px;font-size:11px;color:var(--txt3);font-family:var(--mono);border-top:1px solid var(--line);padding-top:13px}
 </style>
 </head>
@@ -134,13 +151,43 @@ const V={
       ${rows}<div class="ph">HQ orquesta, no contiene. project.yaml futuro.</div></div>`;
   },
   async team(c){
-    const t=await api("/api/v2/team");
-    const w=await api("/api/v2/workspace");
-    c.innerHTML=`<div class="panel"><h2>Sala del equipo</h2>
-      <div class="row"><span><b>Miembros</b></span><span style="color:var(--txt3)">${t.members.join(' · ')}</span></div>
-      <div class="row"><span><b>Canales</span></span><span style="color:var(--txt3)">${t.channels.join(' · ')}</span></div>
-      <div class="row"><span><b>Workspace</b></span><span style="${w.has_drafts?'st down':'st up'}">${w.has_drafts?'borradores':'(vacío)'}</span></div>
-      <div class="ph">"Promover" un mensaje → ADR / Tarea / Principio / Informe (futuro, Safety)</div></div>`;
+    c.innerHTML=`<div class="panel"><h2>Horizon Team · sala permanente</h2>
+      <div id="msgs" class="msgs"></div>
+      <div class="composer">
+        <input id="msg" autocomplete="off" placeholder="escribe como Blanco, Atlas o Hermes…" />
+        <button id="send">Enviar</button>
+      </div>
+      <div class="ph">Promueve cualquier mensaje a ADR / Tarea / Principio / Informe / Decisión (Workspace → Git, Safety).</div></div>`;
+    const box=$("#msgs");
+    const render=async()=>{
+      const d=await api("/api/v2/team/messages");
+      const ms=d.messages||[];
+      box.innerHTML=ms.map(m=>`<div class="msg ${m.read?'read':'unread'}">
+        <div class="mh"><span class="au">${esc(m.author)}</span>
+          <span class="ts">${new Date(m.ts*1000).toLocaleString()}</span>
+          ${m.read?'<span class="r">leído</span>':'<span class="ru">nuevo</span>'}</div>
+        <div class="mt">${esc(m.text)}</div>
+        <div class="mact">
+          <button data-act="reply" data-id="${m.id}">Responder</button>
+          <button data-act="adr" data-id="${m.id}">▸ ADR</button>
+          <button data-act="tarea" data-id="${m.id}">▸ Tarea</button>
+          <button data-act="principio" data-id="${m.id}">▸ Principio</button>
+          <button data-act="informe" data-id="${m.id}">▸ Informe</button>
+          <button data-act="decision" data-id="${m.id}">▸ Decisión</button>
+        </div></div>`).join("")||'<div class="ph">sala vacía — escribe el primer mensaje</div>';
+      box.querySelectorAll(".mact button").forEach(b=>b.onclick=async()=>{
+        const id=b.dataset.id, act=b.dataset.act;
+        if(act==='reply'){const t=prompt("Respuesta:");if(t&&t.trim()){await fetch("/api/v2/team/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({author:"Blanco",text:t,parent_id:id})});render();}}
+        else{const r=await fetch("/api/v2/team/promote",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({msg_id:id,target:act,by:"HQ-003"})});const j=await r.json();alert(j.ok?('Promovido a '+act+': '+(j.file||'')):'Error: '+(j.error||''));if(j.ok)render();}
+      });
+      // marcar leídos
+      const nuevos=ms.filter(m=>!m.read).map(m=>m.id);
+      if(nuevos.length)await fetch("/api/v2/team/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:nuevos})});
+    };
+    const send=async()=>{const t=$("#msg").value.trim();if(!t)return;await fetch("/api/v2/team/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({author:"Blanco",text:t})});$("#msg").value='';render();};
+    $("#send").onclick=send;
+    $("#msg").addEventListener("keydown",e=>{if(e.key==='Enter')send();});
+    render();
   },
   async terminal(c){
     c.innerHTML=`<div class="panel"><h2>Horizon Shell</h2>

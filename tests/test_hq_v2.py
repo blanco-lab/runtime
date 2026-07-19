@@ -8,6 +8,7 @@ estos son los datos que el frontend consumiría.
 Ejecuta: python3 tests/test_hq_v2.py
 """
 import sys
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +60,48 @@ def main() -> int:
     code, _ = v2.handle("/api/v2/nope")
     assert code == 404
     print("  [OK] /api/v2/nope -> 404")
+
+    # ── HQ-003: comunicación del equipo (Workspace -> Git bajo Safety)
+    from pathlib import Path as _P
+    team_file = ROOT / "hq" / "workspace" / "team" / "horizon-team.jsonl"
+    # limpiar workspace para test aislado (git-ignored, seguro)
+    if team_file.exists():
+        team_file.unlink()
+    m = v2.team_post("Blanco", "Propuesta de prueba HQ-003")
+    assert m["id"] and m["text"].startswith("Propuesta")
+    msgs = v2.team_list()
+    assert any(x["id"] == m["id"] for x in msgs), "mensaje no persistido en workspace"
+    print("  [OK] team: mensaje escrito y leído en workspace (git-ignored)")
+
+    # marcar leído
+    v2.team_mark_read([m["id"]])
+    assert v2.team_list()[0]["read"] is True
+    print("  [OK] team: marcar leído")
+
+    # promover a ADR -> crea archivo en hq/decisions y commitea en git
+    before = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(ROOT),
+                            capture_output=True, text=True).stdout.strip()
+    res = v2.team_promote(m["id"], "adr", by="HQ-003")
+    assert res.get("ok"), res
+    assert (ROOT / res["file"]).exists(), res
+    after = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(ROOT),
+                           capture_output=True, text=True).stdout.strip()
+    assert before != after, "promover no commiteó en git"
+    print(f"  [OK] team: promovido a ADR -> {res['file']} (commit en git)")
+    # limpiar: borrar el ADR de prueba y deshacer commit para no ensuciar repo
+    subprocess.run(["git", "reset", "--soft", "HEAD~1"], cwd=str(ROOT),
+                   capture_output=True, text=True)
+    (ROOT / res["file"]).unlink()
+
+    # promover a tarea -> añade a board.md y commitea
+    res2 = v2.team_promote(m["id"], "tarea", by="HQ-003")
+    assert res2.get("ok"), res2
+    subprocess.run(["git", "reset", "--soft", "HEAD~1"], cwd=str(ROOT),
+                   capture_output=True, text=True)
+    # restaurar board.md (el append queda en working tree; lo descartamos)
+    subprocess.run(["git", "checkout", "--", "hq/board.md"], cwd=str(ROOT),
+                   capture_output=True, text=True)
+    print("  [OK] team: promovido a tarea (board.md + commit, revertido)")
 
     print("\nRESULTADO:", "TODO VERDE" if ok else "HAY FALLOS")
     return 0 if ok else 1

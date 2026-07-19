@@ -45,6 +45,27 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        path = self.path.split("?", 1)[0]
+        if not path.startswith("/api/v2/team"):
+            self._send(404, b'{"error":"not found"}', "application/json")
+            return
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            payload = json.loads(raw.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            payload = {}
+        code, data = hq_v2.handle_post(path, payload)
+        self._send(code, json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path.startswith("/api/v2/"):

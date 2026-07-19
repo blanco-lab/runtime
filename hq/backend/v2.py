@@ -166,36 +166,152 @@ def projects_list() -> list[dict]:
 
 
 # ───────────────────────────────────────────────────────────── workspace/team
+import json as _json
+import uuid as _uuid
+
+TEAM_DIR = WORKSPACE / "team"
+TEAM_FILE = TEAM_DIR / "horizon-team.jsonl"
+
+
+def _team_ensure():
+    TEAM_DIR.mkdir(parents=True, exist_ok=True)
+    if not TEAM_FILE.exists():
+        TEAM_FILE.write_text("", encoding="utf-8")
+
+
+def _team_append(msg: dict):
+    _team_ensure()
+    with TEAM_FILE.open("a", encoding="utf-8") as f:
+        f.write(_json.dumps(msg, ensure_ascii=False) + "\n")
+
+
+def _team_read_all() -> list[dict]:
+    _team_ensure()
+    out = []
+    for line in TEAM_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            try:
+                out.append(_json.loads(line))
+            except _json.JSONDecodeError:
+                pass
+    return out
+
+
+def team_post(author: str, text: str, parent_id: str | None = None) -> dict:
+    msg = {
+        "id": _uuid.uuid4().hex[:12],
+        "author": author or "Anónimo",
+        "text": text,
+        "parent_id": parent_id,
+        "ts": int(time.time()),
+        "read": False,
+    }
+    _team_append(msg)
+    return msg
+
+
+def team_list() -> list[dict]:
+    return _team_read_all()
+
+
+def team_mark_read(ids: list[str] | None = None):
+    msgs = _team_read_all()
+    changed = False
+    for m in msgs:
+        if ids is None or m["id"] in ids:
+            if not m["read"]:
+                m["read"] = True
+                changed = True
+    if changed:
+        TEAM_FILE.write_text(
+            "\n".join(_json.dumps(m, ensure_ascii=False) for m in msgs) + "\n",
+            encoding="utf-8",
+        )
+    return {"ok": True, "marked": len(ids) if ids else "all"}
+
+
 def workspace_state() -> dict:
-    # v2b: workspace existe pero está vacío (borradores del equipo).
     WORKSPACE.mkdir(parents=True, exist_ok=True)
     has = any(WORKSPACE.iterdir())
     return {"path": str(WORKSPACE), "exists": True, "has_drafts": has,
-            "note": "borradores no oficiales; 'Promover' -> Git (futuro, Safety)"}
+            "note": "borradores no oficiales; 'Promover' -> Git (Safety)"}
 
 
 def team_state() -> dict:
     return {"members": ["Atlas", "Hermes", "Blanco", "Horizon Agent (futuro)"],
-            "channels": ["#arquitectura", "#runtime", "#hq"],
-            "note": "sala permanente del equipo; promover a ADR/Tarea/Principio/Informe"}
+            "channels": ["Horizon Team (permanente)"],
+            "note": "sala permanente del equipo; promover a ADR/Tarea/Principio/Informe/Decisión"}
 
 
-def meetings_state() -> dict:
-    return {"fields": ["agenda", "conversación", "decisiones", "acciones"],
-            "generates": "MEETING-AAAA-MM-DD.md",
-            "note": "estructura lista; generación al guardar (futuro)"}
+# ───────────────────────────────────────────────────────────── promoter (Safety)
+def _safe_commit(files: list[str], message: str) -> dict:
+    """Write a Git bajo Safety: solo `git add <file>` + `git commit`.
+    Sin shell=True, argumentos en lista. Nada fuera de HQ/."""
+    try:
+        subprocess.run(["git", "add", "--", *files], cwd=str(ROOT),
+                       check=True, capture_output=True, text=True, timeout=15)
+        r = subprocess.run(["git", "commit", "-m", message], cwd=str(ROOT),
+                           capture_output=True, text=True, timeout=15)
+        if r.returncode != 0:
+            return {"ok": False, "error": r.stderr.strip() or "commit sin cambios"}
+        return {"ok": True, "commit": (r.stdout + r.stderr).strip()[:200]}
+    except subprocess.CalledProcessError as e:
+        return {"ok": False, "error": e.stderr.strip()}
 
 
-def settings_state() -> dict:
-    return {
-        "runtime": {"daemon": "spotify_player -d (systemd user)", "tests": "python3 tests/run_all.py"},
-        "hq": {"theme": "dark", "accent": "#7C6CFF", "port": 8765},
-        "horizon": {"status": "no implementado"},
-        "providers": {"spotify": "reuse token (ADR-0008)"},
-        "services": {"policy": "lectura hoy; control v2c con Safety"},
-        "users": {"authorized": ["8581085602 (Blanco)"]},
-        "auth": {"email": "gmail app password (.env)", "spotify": "existing credential"},
-    }
+def team_promote(msg_id: str, target: str, by: str = "Hermes") -> dict:
+    """Promueve un mensaje de Workspace a Git (Safety).
+    target: adr | tarea | principio | informe | decision
+    Crea el artefacto en hq/ y lo commitea (sin shell libre)."""
+    msgs = _team_read_all()
+    msg = next((m for m in msgs if m["id"] == msg_id), None)
+    if not msg:
+        return {"ok": False, "error": "mensaje no encontrado"}
+    text = msg["text"]
+    ts = time.strftime("%Y-%m-%d", time.localtime(msg["ts"]))
+    author = msg["author"]
+    body: str | None = None
+
+    if target == "adr":
+        slug = "ADR-" + _uuid.uuid4().hex[:4]
+        path = HQ / "decisions" / f"{slug}-promoted.md"
+        body = f"# {slug} (promovido desde Team)\n\n- De: {author} · {ts}\n- Estado: PROPUESTA\n\n{text}\n"
+    elif target == "informe":
+        slug = f"REPORT-promoted-{ts}"
+        path = HQ / "reports" / f"{slug}.md"
+        body = f"# REPORT (promovido desde Team)\n\n- De: {author} · {ts}\n\n{text}\n"
+    elif target == "principio":
+        slug = f"PRINCIPLE-promoted-{_uuid.uuid4().hex[:4]}"
+        path = HQ / "principles" / f"{slug}.md"
+        body = f"# {slug} (promovido desde Team)\n\n- De: {author} · {ts}\n\n{text}\n"
+    elif target == "tarea":
+        # Las tareas viven en el board.md (workspace oficial). Añade entrada.
+        path = HQ / "board.md"
+        body = None  # se maneja aparte
+    elif target == "decision":
+        slug = f"MEETING-DEC-{_uuid.uuid4().hex[:4]}"
+        path = HQ / "decisions" / f"{slug}.md"
+        body = f"# Decisión (promovida desde Team)\n\n- De: {author} · {ts}\n\n{text}\n"
+    else:
+        return {"ok": False, "error": f"target desconocido: {target}"}
+
+    if target == "tarea":
+        # Añade a board.md bajo EN CURSO sin reescribir todo
+        _team_ensure()
+        board = HQ / "board.md"
+        line = f"\n[HQ-TASK-{_uuid.uuid4().hex[:4]}] {text}\n  dueño: {author}  estado: EN CURSO  origen: Team (promovido)\n"
+        with board.open("a", encoding="utf-8") as f:
+            f.write(line)
+        res = _safe_commit([str(board.relative_to(ROOT))], f"task(HQ-003): promovido desde Team por {by}")
+        return {"ok": True, "target": "tarea", "file": str(board), **res}
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    assert body is not None, "body requerido para promover (no tarea)"
+    path.write_text(body, encoding="utf-8")
+    rel = str(path.relative_to(ROOT))
+    res = _safe_commit([rel], f"{target}(HQ-003): promovido desde Team por {by}")
+    return {"ok": True, "target": target, "file": rel, **res}
 
 
 # ───────────────────────────────────────────────────────────── shell
@@ -232,6 +348,24 @@ def shell_dispatch(cmd: str) -> dict:
 
 
 # ───────────────────────────────────────────────────────────── router
+def meetings_state() -> dict:
+    return {"fields": ["agenda", "conversación", "decisiones", "acciones"],
+            "generates": "MEETING-AAAA-MM-DD.md",
+            "note": "estructura lista; generación al guardar (futuro)"}
+
+
+def settings_state() -> dict:
+    return {
+        "runtime": {"daemon": "spotify_player -d (systemd user)", "tests": "python3 tests/run_all.py"},
+        "hq": {"theme": "dark", "accent": "#7C6CFF", "port": 8765},
+        "horizon": {"status": "no implementado"},
+        "providers": {"spotify": "reuse token (ADR-0008)"},
+        "services": {"policy": "lectura hoy; control v2c con Safety"},
+        "users": {"authorized": ["8581085602 (Blanco)"]},
+        "auth": {"email": "gmail app password (.env)", "spotify": "existing credential"},
+    }
+
+
 _ROUTES = {
     "/api/v2/content/state": lambda: v1_handle("/api/state")[1],
     "/api/v2/content/board": lambda: v1_handle("/api/board")[1],
@@ -244,10 +378,37 @@ _ROUTES = {
                                  "system": services_system()},
     "/api/v2/projects": lambda: {"projects": projects_list()},
     "/api/v2/team": team_state,
+    "/api/v2/team/messages": lambda: {"messages": team_list()},
     "/api/v2/meetings": meetings_state,
     "/api/v2/settings": settings_state,
     "/api/v2/shell": lambda: {"ok": True, "commands": SHELL_COMMANDS},
 }
+
+
+def handle_post(path: str, payload: dict) -> tuple[int, dict]:
+    """POST /api/v2/team/* — escribir en Workspace (no en Git)."""
+    if path == "/api/v2/team/messages":
+        author = payload.get("author", "Anónimo")
+        text = (payload.get("text") or "").strip()
+        parent = payload.get("parent_id")
+        if not text:
+            return 400, {"ok": False, "error": "texto vacío"}
+        msg = team_post(author, text, parent)
+        return 200, {"ok": True, "message": msg}
+    if path == "/api/v2/team/read":
+        ids = payload.get("ids")
+        res = team_mark_read(ids)
+        return 200, res
+    if path == "/api/v2/team/promote":
+        msg_id = payload.get("msg_id")
+        target = payload.get("target")
+        by = payload.get("by", "Hermes")
+        if not msg_id or not target:
+            return 400, {"ok": False, "error": "msg_id y target requeridos"}
+        res = team_promote(msg_id, target, by)
+        code = 200 if res.get("ok") else 400
+        return code, res
+    return 404, {"error": "not found", "path": path}
 
 
 def handle(path: str, query: str | None = None) -> tuple[int, dict]:
