@@ -115,12 +115,26 @@ def understand(user_text: str) -> Intent:
     if label is None:
         # ¿Es una petición de podcast (con o sin "pon")?
         if _is_podcast_request(text):
-            # Listar episodios vs reproducir.
-            if any(w in text for w in ["lista", "listar", "muestra", "muéstrame",
-                                     "enseña", "enseñame", "ver los", "ver las"]):
+            pod_ents = _extract_podcast_entities(user_text)
+            has_list_verb = any(w in text for w in [
+                "lista", "listar", "muestra", "muéstrame",
+                "enseña", "enseñame", "ver los", "ver las"])
+            has_play_verb = (
+                any(text.startswith(p) for p in _PLAY_PREFIXES)
+                or any(w in text for w in [
+                    "quiero", "escuchar", "oír", "oir", "dame", "ponme",
+                    "reproducir", "reproduce", "reproduce a", "pon a"]))
+            if has_list_verb:
                 label = "list_podcast"
-            else:
+            elif (has_play_verb or pod_ents.get("episode_number") is not None
+                  or pod_ents.get("episode_title") or pod_ents.get("latest")
+                  or pod_ents.get("first")):
                 label = "play_podcast"
+            else:
+                # "podcast X" a secas -> listar para que elija (ZUB: le
+                # muestro, no disparo a ciegas).
+                label = "list_podcast"
+            entities.update(pod_ents)
         # Reproducir algo concreto: "pon <x>" / "reproduce <x>".
         elif any(text.startswith(p) for p in _PLAY_PREFIXES):
             label = "play_music"
@@ -177,8 +191,11 @@ def _extract_podcast_entities(user_text: str) -> dict[str, Any]:
 
     - show_query: nombre del podcast (ej. "Monos Estocásticos").
     - episode_title: si pide "que se llama X" / "titulado X".
-    - episode_number: si pide "capítulo N" / "episodio N" (LITERAL).
-    - list: si pide ver la lista de episodios.
+    - episode_number: si pide "capítulo N" / "episodio N" (LITERAL, por
+      orden de publicación: 1 = más antiguo).
+    - latest: si pide "último" / "último publicado" => episodio MÁS RECIENTE.
+    - first: si pide "primero" => episodio MÁS ANTIGUO (capítulo 1).
+    - list: si pide ver la lista de episodios (el flujo principal decide).
     """
     import re
     text = user_text.strip()
@@ -189,6 +206,13 @@ def _extract_podcast_entities(user_text: str) -> dict[str, Any]:
     m = re.search(r"(?:capí?tulo|episodio)\s+(?:n[ºo°]?\s*)?(\d+)", t)
     if m:
         ents["episode_number"] = int(m.group(1))
+
+    # "último/a" => episodio más reciente (publicado después).
+    if re.search(r"\búltim[oa]\b", t) or "ultimo" in t or "ultima" in t:
+        ents["latest"] = True
+    # "primero/a" => episodio más antiguo (capítulo 1).
+    if re.search(r"\bprimero\b|\bprimera\b", t) or "primero" in t or "primera" in t:
+        ents["first"] = True
 
     # Título de episodio: "que se llama X" / "titulado X" / "llamado X".
     mt = re.search(r"(?:que se llama|titulado|llamado|llamada)\s+([^,.!?]+)", t)
@@ -207,19 +231,26 @@ def _extract_podcast_entities(user_text: str) -> dict[str, Any]:
         r"^.*?\b(?:pon|quiero|dame|ponme|escuchar|o[ií]r|quier[oa]|querr[íi]a|"
         r"lista|listar|muestra|ense[ñn]a|ense[ñn]ame|ver)\b\s*"
         r"(?:los|las|un\s+|una\s+)?(?:podcast|p[oó]dcast|el|la|los|las)?\s*(?:de\s+|sobre\s+|los\s+|las\s+)?",
+        # paréntesis (ej. "(es decir el último publicado)")
+        r"\([^)]*\)",
         # "que se llama X" / "titulado X" -> borra desde ahí (el título va en episode_title)
         r"\b(?:que se llama|titulado|llamado|llamada)\b.*$",
         # "capítulo N de" / "episodio N de" -> conserva el nombre que queda
         r"\b(?:cap[íi]tulo|episodio)\s+\d+\s+de\s+",
         r"\b(?:cap[íi]tulo|episodio)\s+\d+\b",
+        # marcas de orden (ya capturadas en latest/first)
+        r"\búltim[oa]\b",
+        r"\bultimo\b|\bultima\b",
+        r"\bprimero\b|\bprimera\b",
+        r"\bprimer\b|\bprimera\b",
         # marcas sueltas
         r"\b(?:y|el|la|los|las|un|una|este|esta|ese|esa)\s+(?:podcast|p[oó]dcast|cap[íi]tulo|episodio)\b",
         r"\b(?:podcast|p[oó]dcast|cap[íi]tulo|episodios|cap[íi]tulos|episodio)\b",
     ):
         show = re.sub(pat, " ", show, flags=re.IGNORECASE)
     show = re.sub(r"\s+", " ", show).strip(" .!?¡¿,")
-    # Quita artículos sueltos que pudieran quedar al inicio tras los reemplazos.
-    show = re.sub(r"^(el|la|los|las|un|una|este|esta|ese|esa)\b", " ", show,
+    # Quita artículos y "de" iniciales que pudieran quedar tras los reemplazos.
+    show = re.sub(r"^(el|la|los|las|un|una|este|esta|ese|esa|de)\b", " ", show,
                   flags=re.IGNORECASE).strip(" .!?¡¿,")
     if show:
         ents["show_query"] = show

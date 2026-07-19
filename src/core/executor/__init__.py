@@ -75,9 +75,15 @@ def _execute_podcast(mp: "MusicPlayer", params: dict) -> dict:
     """Resuelve la primitiva de podcast correcta (ajuste Atlas).
 
     El Intent ya decidió play_podcast/list_podcast y extrajo entidades
-    (show_query, episode_title, episode_number, list). Aquí el Executor
-    invoca la primitiva técnica del backend vía BackendDispatcher. La
-    Capability music_player queda congelada.
+    (show_query, episode_title, episode_number, latest, first, list). Aquí
+    el Executor invoca la primitiva técnica del backend vía BackendDispatcher.
+    La Capability music_player queda congelada.
+
+    Orden de publicación (como en la web de Spotify):
+    - capítulo 1 = el MÁS ANTIGUO.
+    - capítulo N = el N-ésimo desde el inicio (el más viejo de los N más
+      recientes).
+    - "último" = el MÁS RECIENTE (offset 0 de la API).
     """
     backend = mp._backend
     disp = BackendDispatcher(backend)
@@ -88,37 +94,68 @@ def _execute_podcast(mp: "MusicPlayer", params: dict) -> dict:
     show_id = show["id"]
     show_name = show.get("name", show_query)
 
-    # Listado de episodios (los 10 últimos; "más" lo recordará Horizon).
-    if params.get("list"):
+    def _list_formatted() -> dict:
+        """Lista los 10 últimos publicados (formato para el usuario)."""
         r = disp.dispatch({"kind": "list_episodes", "show_id": show_id,
                            "limit": 10, "offset": 0})
         if not r.get("ok"):
             return r
+        total = r["data"].get("total", len(r["data"]["items"]))
         items = r["data"]["items"]
-        lines = [f"📋 {show_name} — últimos {len(items)} episodios:"]
+        lines = [f"📋 {show_name} — últimos {len(items)} episodios"
+                 f" (de {total}):"]
         for i, e in enumerate(items, 1):
             name = e.get("name", "?")
             lines.append(f"  {i}. {name}")
         lines.append("(di 'pon el 7' o 'más' para seguir — Horizon recordará el offset)")
         return {"ok": True, "message": "\n".join(lines), "show_id": show_id}
 
-    # Capítulo N (número LITERAL, regla de Blanco).
-    if params.get("episode_number") is not None:
-        n = int(params["episode_number"])
-        # La API devuelve del más reciente al más viejo; el capítulo N
-        # (orden de publicación, 1 = más antiguo) es el N-ésimo desde el
-        # inicio => último de los N más recientes.
+    # Listado de episodios (los 10 últimos publicados; "más" lo recordará
+    # Horizon). "Últimos" = del más reciente al más viejo (orden de la API).
+    if params.get("list"):
+        return _list_formatted()
+
+    def _by_ordinal(n: int) -> dict:
+        """Devuelve el episodio n-ésimo en orden de publicación (1 = más
+        antiguo) usando el total real del show."""
+        meta = disp.dispatch({"kind": "list_episodes", "show_id": show_id,
+                              "limit": 1, "offset": 0})
+        if not meta.get("ok"):
+            return meta
+        total = meta["data"].get("total", 0)
+        if total == 0:
+            return {"ok": False, "message": f"{show_name} no tiene episodios."}
+        if n < 1 or n > total:
+            return {"ok": False,
+                    "message": f"{show_name} tiene {total} episodios; no hay capítulo {n}."}
+        # Posición en la respuesta de la API (0=reciente). Capítulo 1 =
+        # más antiguo = offset total-1.
+        offset = total - n
         r = disp.dispatch({"kind": "list_episodes", "show_id": show_id,
-                           "limit": n, "offset": 0})
+                           "limit": 1, "offset": offset})
+        if not r.get("ok"):
+            return r
+        ep = r["data"]["items"][0]
+        return disp.dispatch({"kind": "play_episode", "uri": ep["uri"]})
+
+    # "último/a" => episodio MÁS RECIENTE (offset 0).
+    if params.get("latest"):
+        r = disp.dispatch({"kind": "list_episodes", "show_id": show_id,
+                           "limit": 1, "offset": 0})
         if not r.get("ok"):
             return r
         items = r["data"]["items"]
-        if len(items) < n:
-            return {"ok": False,
-                    "message": f"El podcast solo tiene {len(items)} episodios; no hay capítulo {n}."}
-        ep = items[-1]
-        return disp.dispatch({"kind": "play_episode",
-                              "uri": ep["uri"]})
+        if not items:
+            return {"ok": False, "message": f"{show_name} no tiene episodios."}
+        return disp.dispatch({"kind": "play_episode", "uri": items[0]["uri"]})
+
+    # "primero/a" => episodio MÁS ANTIGUO = capítulo 1.
+    if params.get("first"):
+        return _by_ordinal(1)
+
+    # Capítulo N (número LITERAL, regla de Blanco), por orden de publicación.
+    if params.get("episode_number") is not None:
+        return _by_ordinal(int(params["episode_number"]))
 
     # Título de episodio (el más parecido si hay typo).
     if params.get("episode_title"):
@@ -132,8 +169,8 @@ def _execute_podcast(mp: "MusicPlayer", params: dict) -> dict:
         best = max(found, key=lambda e: _similarity(title, (e.get("name") or "").lower()))
         return disp.dispatch({"kind": "play_episode", "uri": best["uri"]})
 
-    # Solo show: reproduce el show entero (último episodio).
-    return disp.dispatch({"kind": "play_show", "uri": f"spotify:show:{show_id}"})
+    # "podcast X" a secas -> lista para que elija (ZUB), no dispara a ciegas.
+    return _list_formatted()
 
 
 def _similarity(a: str, b: str) -> float:
