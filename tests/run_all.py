@@ -16,6 +16,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 SUITE = [
     "test_command_runner.py",
     "test_music_player.py",
+    "test_auth.py",
 ]
 
 
