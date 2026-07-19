@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Horizon HQ — Puente de Mando</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#0B0B0F; --bg2:#141419; --bg3:#1A1A21; --line:#23232B; --line2:#2E2E38;
+  --txt:#E6E6EA; --txt2:#A0A0AA; --txt3:#6A6A75;
+  --accent:#7C6CFF; --ok:#3FB950; --warn:#E3B341; --bad:#F85149; --info:#58A6FF;
+  --radius:10px; --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:'Inter',system-ui,sans-serif;
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+.sidebar{position:fixed;top:0;left:0;width:218px;height:100vh;background:var(--bg2);
+  border-right:1px solid var(--line);display:flex;flex-direction:column;padding:20px 14px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:14px;letter-spacing:.3px}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+.brand-sub{font-size:11px;color:var(--txt3);margin:3px 0 22px;font-family:var(--mono)}
+.nav{display:flex;flex-direction:column;gap:1px}
+.nav button{background:transparent;border:0;color:var(--txt2);text-align:left;
+  padding:9px 12px;border-radius:8px;font-size:13px;display:flex;justify-content:space-between;
+  align-items:center;transition:.12s}
+.nav button:hover{background:var(--bg3);color:var(--txt)}
+.nav button.active{background:var(--bg3);color:var(--txt);box-shadow:inset 2px 0 0 var(--accent)}
+.nav .tag{font-size:9px;color:var(--txt3);font-family:var(--mono)}
+.nav .ic{width:18px;display:inline-block;color:var(--accent);font-size:12px}
+.main{margin-left:218px;padding:30px 38px;max-width:1180px}
+.head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:24px;gap:16px}
+.head h1{font-size:21px;font-weight:600;letter-spacing:-.2px}
+.head .kbd{font-size:11px;color:var(--txt3);font-family:var(--mono);border:1px solid var(--line2);
+  padding:2px 8px;border-radius:6px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:12px;margin-bottom:26px}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px}
+.card .n{font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-1px}
+.card .l{font-size:10.5px;color:var(--txt2);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+.card.warn{border-color:#3a3320}.card.warn .n{color:var(--warn)}
+.card.bad{border-color:#3a2a2a}.card.bad .n{color:var(--bad)}
+.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:16px}
+.panel{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.panel h2{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--txt2);font-weight:600;margin-bottom:13px}
+.boardcol{display:flex;flex-direction:column;gap:10px}
+.seg{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.seg .c{background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+.seg .c .h{font-size:10px;color:var(--txt2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px}
+.seg .c .it{padding:6px 0;font-size:12px;border-top:1px solid var(--line)}
+.seg .c .it .id{display:block;font-family:var(--mono);font-size:9px;color:var(--accent);margin-bottom:2px}
+.seg .c .it .ti{color:var(--txt)}
+.row{display:flex;justify-content:space-between;align-items:center;padding:9px 11px;
+  background:var(--bg3);border:1px solid var(--line);border-radius:8px;margin-bottom:7px;font-size:12.5px}
+.row .st{font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:20px;border:1px solid var(--line)}
+.row .st.up,.row .st.active,.row .st.ok,.row .st.●{color:var(--ok);border-color:#1f3a25}
+.row .st.down,.row .st.inactive,.row .st.failed,.row .st.unknown{color:var(--txt3)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:7px}
+.dot.up,.dot.active,.dot.ok{background:var(--ok)}.dot.down,.dot.inactive{background:var(--txt3)}
+.shell{background:#08080b;border:1px solid var(--line);border-radius:var(--radius);
+  font-family:var(--mono);font-size:12.5px;padding:14px 16px;height:300px;overflow:auto}
+.shell .l{white-space:pre-wrap;line-height:1.7}
+.shell .p{color:var(--accent)}
+.shell input{background:transparent;border:0;color:var(--txt);font-family:var(--mono);font-size:12.5px;outline:none;width:calc(100% - 90px)}
+.ph{color:var(--txt3);font-style:italic;font-size:12px;padding:8px 2px;border:1px dashed var(--line2);
+  border-radius:8px;text-align:center;margin-top:8px}
+.footer{margin-top:34px;font-size:11px;color:var(--txt3);font-family:var(--mono);border-top:1px solid var(--line);padding-top:13px}
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><span class="dot"></span>Horizon HQ</div>
+  <div class="brand-sub">puente de mando · v2</div>
+  <nav class="nav" id="nav">
+    <button data-view="dashboard" class="active"><span class="ic">◧</span>Dashboard</button>
+    <button data-view="projects"><span class="ic">▣</span>Projects</button>
+    <button data-view="team"><span class="ic">◯</span>Team</button>
+    <button data-view="terminal"><span class="ic">◇</span>Terminal</button>
+    <button data-view="meetings"><span class="ic">◷</span>Meetings <span class="tag">soon</span></button>
+    <button data-view="roadmap"><span class="ic">≡</span>Roadmap</button>
+    <button data-view="settings"><span class="ic">⚙</span>Settings <span class="tag">soon</span></button>
+  </nav>
+</aside>
+
+<main class="main">
+  <div class="head"><h1 id="vt">Dashboard</h1><span class="kbd">⌘K pronto · ⌘J shell</span></div>
+  <div id="content"></div>
+  <div class="footer">HQ v2 · interfaz solo conoce la API · Git = fuente · ADR-0013</div>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+const views={overview:"Dashboard",projects:"Projects",team:"Team",terminal:"Terminal",
+  meetings:"Meetings",roadmap:"Roadmap",settings:"Settings"};
+async function api(p){const r=await fetch(p);return r.json();}
+function esc(s){return (s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+const statusClass=s=>/up|active|ok|●|%/.test(s)?"st up":/down|inactive|failed|unknown/.test(s)?"st down":"st";
+
+const V={
+  async dashboard(c){
+    const [s,sv,b,r,p]=await Promise.all([api("/api/v2/content/state"),api("/api/v2/services"),
+      api("/api/v2/content/board"),api("/api/v2/content/reports"),api("/api/v2/projects")]);
+    const eco=sv.ecosystem, sys=sv.system;
+    const svcCards=`
+      <div class="cards">
+        <div class="card"><div class="n">${s.counts.adrs}</div><div class="l">ADRs</div></div>
+        <div class="card"><div class="n">${s.counts.reports}</div><div class="l">Informes</div></div>
+        <div class="card ${s.has_blockers?'warn':''}"><div class="n">${s.has_blockers?'⚠':'✓'}</div><div class="l">Bloqueos</div></div>
+        <div class="card"><div class="n">${p.projects.length}</div><div class="l">Proyectos</div></div>
+        <div class="card"><div class="n">${eco.filter(x=>x.status==='up'||x.status==='active').length}/${eco.length}</div><div class="l">Ecosystem activos</div></div>
+        <div class="card"><div class="n">${sys.length}</div><div class="l">System</div></div>
+      </div>`;
+    const boardSeg=Object.entries(b.sections).map(([k,it])=>`
+      <div class="c"><div class="h">${k.replaceAll('_',' ')}</div>${
+        it.length?it.map(i=>`<div class="it"><span class="id">${esc(i.id)}</span><span class="ti">${esc(i.title)}</span></div>`).join(""):'<div class="it" style="color:var(--txt3)">—</div>'
+      }</div>`).join("");
+    const ecoRows=eco.map(x=>`<div class="row"><span><span class="dot ${x.status}"></span>${esc(x.name)}</span><span class="${statusClass(x.status)}">${esc(x.status)}</span></div>`).join("");
+    const sysRows=sys.map(x=>`<div class="row"><span>${esc(x.name)}</span><span class="${statusClass(x.status)}">${esc(x.status)}</span></div>`).join("");
+    const repRows=r.reports.slice(0,5).map(x=>`<div class="row"><span>${esc(x.title)}</span><span class="id" style="font-family:var(--mono);font-size:10px;color:var(--accent)">${esc(x.id)}</span></div>`).join("");
+    c.innerHTML=svcCards+`
+      <div class="grid">
+        <div class="panel"><h2>Board</h2><div class="seg">${boardSeg}</div></div>
+        <div class="panel"><h2>Servicios · Ecosystem</h2>${ecoRows}
+          <div style="margin-top:12px;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.4px">System · nodo local</div>
+          ${sysRows}</div>
+      </div>
+      <div class="panel"><h2>Informes recientes</h2>${repRows||'<div class="ph">sin informes</div>'}</div>`;
+  },
+  async projects(c){
+    const {projects}=await (await api("/api/v2/projects")).projects?{projects:(await api("/api/v2/projects")).projects}:await api("/api/v2/projects");
+    const list=await api("/api/v2/projects");
+    const rows=(list.projects||[]).map(x=>`<div class="row"><span><b>${esc(x.name)}</b> <span style="color:var(--txt3);font-size:11px">${esc(x.type)} · ${esc(x.repo)}</span></span><span class="${statusClass(x.status)}">${esc(x.status)}</span></div>`).join("");
+    c.innerHTML=`<div class="panel"><h2>Proyectos del ecosistema (cada uno su repo)</h2>
+      ${rows}<div class="ph">HQ orquesta, no contiene. project.yaml futuro.</div></div>`;
+  },
+  async team(c){
+    const t=await api("/api/v2/team");
+    const w=await api("/api/v2/workspace");
+    c.innerHTML=`<div class="panel"><h2>Sala del equipo</h2>
+      <div class="row"><span><b>Miembros</b></span><span style="color:var(--txt3)">${t.members.join(' · ')}</span></div>
+      <div class="row"><span><b>Canales</span></span><span style="color:var(--txt3)">${t.channels.join(' · ')}</span></div>
+      <div class="row"><span><b>Workspace</b></span><span style="${w.has_drafts?'st down':'st up'}">${w.has_drafts?'borradores':'(vacío)'}</span></div>
+      <div class="ph">"Promover" un mensaje → ADR / Tarea / Principio / Informe (futuro, Safety)</div></div>`;
+  },
+  async terminal(c){
+    c.innerHTML=`<div class="panel"><h2>Horizon Shell</h2>
+      <div class="shell" id="shell"><div class="l"><span class="p">◇ horizon ❯</span> bienvenido. escribe <b>help</b>.</div></div>
+      <div style="margin-top:8px"><span class="p" style="font-family:var(--mono)">◇ horizon ❯</span>
+        <input id="cmd" autocomplete="off" placeholder="board · services · roadmap · report · help" /></div></div>`;
+    const sh=$("#shell"), inp=$("#cmd");
+    const run=async()=>{
+      const cmd=inp.value.trim(); if(!cmd)return;
+      sh.innerHTML+=`<div class="l"><span class="p">◇ horizon ❯</span> ${esc(cmd)}</div>`;
+      const d=await (await fetch("/api/v2/shell?cmd="+encodeURIComponent(cmd))).json();
+      if(d.type==='help'){sh.innerHTML+=`<div class="l" style="color:var(--txt2)">comandos: ${Object.keys(d.commands).join(', ')}</div>`;}
+      else if(d.type==='services'){sh.innerHTML+=`<div class="l" style="color:var(--txt2)">ECOSYSTEM: ${d.ecosystem.map(x=>x.name+'='+x.status).join(' · ')}</div><div class="l" style="color:var(--txt2)">SYSTEM: ${d.system.map(x=>x.name+'='+x.status).join(' · ')}</div>`;}
+      else if(d.type==='board'){Object.entries(d.data).forEach(([k,v])=>{if(v.length)sh.innerHTML+=`<div class="l" style="color:var(--txt2)">${k}: ${v.length} piezas</div>`;});}
+      else if(d.type==='roadmap'){sh.innerHTML+=`<div class="l" style="color:var(--txt2)">activas: ${d.data.length}</div>`;}
+      else if(d.type==='reports'){sh.innerHTML+=`<div class="l" style="color:var(--txt2)">informes: ${d.data.length}</div>`;}
+      else {sh.innerHTML+=`<div class="l" style="color:var(--bad)">${esc(d.error||'sin salida')}</div>`;}
+      inp.value=''; sh.scrollTop=sh.scrollHeight;
+    };
+    inp.addEventListener("keydown",e=>{if(e.key==='Enter')run();});
+    inp.focus();
+  },
+  async meetings(c){c.innerHTML=`<div class="panel"><h2>Meetings</h2><div class="ph">Estructura: agenda · conversación · decisiones · acciones → MEETING-AAAA-MM-DD.md (próxima iteración)</div></div>`;},
+  async roadmap(c){
+    const r=await api("/api/v2/content/roadmap");
+    c.innerHTML=`<div class="panel"><h2>Roadmap activo</h2>${
+      r.active.map(i=>`<div class="row"><span><b>${esc(i.title)}</b></span><span class="st up">${esc(i.state)}</span></div>`).join("")||'<div class="ph">sin activas</div>'}</div>`;
+  },
+  async settings(c){c.innerHTML=`<div class="panel"><h2>Settings</h2><div class="ph">Runtime · HQ · Horizon · Providers · Services · Users · Auth (próxima iteración)</div></div>`;}
+};
+
+async function show(v){
+  $("#vt").textContent=views[v];
+  $$(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===v));
+  const c=$("#content");c.innerHTML='<div class="ph">cargando…</div>';
+  try{await (V[v]||V.dashboard)(c);}catch(e){c.innerHTML='<div class="ph">error: '+esc(e.message)+'</div>';}
+}
+function $$(s){return [...document.querySelectorAll(s)];}
+$$(".nav button").forEach(b=>b.onclick=()=>show(b.dataset.view));
+show("dashboard");
+</script>
+</body>
+</html>

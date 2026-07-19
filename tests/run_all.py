@@ -20,6 +20,7 @@ SUITE = [
     "test_spotify_backend.py",
     "test_podcast_intent.py",
     "test_hq_backend.py",
+    "test_hq_v2.py",
 ]
 
 

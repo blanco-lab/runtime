@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from hq.backend import handle as api_handle
+from hq.backend import v2 as hq_v2
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root
 WEB = ROOT / "hq" / "web"
@@ -46,13 +47,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        if path.startswith("/api/v2/"):
+            query = self.path.split("?", 1)[1] if "?" in self.path else None
+            code, data = hq_v2.handle(path, query)
+            self._send(code, json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            return
         if path.startswith("/api/"):
             code, data = api_handle(path)
             self._send(code, json.dumps(data, ensure_ascii=False).encode("utf-8"))
             return
-        # Dashboard web (estático)
+        # Dashboard web (estático) — v2 es el Puente de Mando por defecto
         if path in ("/", ""):
-            path = "/index.html"
+            path = "/index-v2.html"
         f = WEB / path.lstrip("/")
         if not f.is_relative_to(WEB) or not f.is_file():
             self._send(404, b"not found", "text/plain")
