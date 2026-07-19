@@ -45,6 +45,17 @@ def build(intent_label: str, intent=None) -> Action:
             params=params,
             intent_label=intent_label,
         )
+    # Podcasts: el Intent ya decidió play_podcast / list_podcast y extrajo
+    # las entidades (show_query, episode_title, episode_number, list).
+    # El Executor resolverá la primitiva del backend (ajuste Atlas: el
+    # backend no parsea NL; el Intent sí). La Capability sigue congelada.
+    if intent_label in ("play_podcast", "list_podcast"):
+        return Action(
+            type=intent_label,
+            capability="music_player",
+            params=dict(intent.entities) if intent else {},
+            intent_label=intent_label,
+        )
     if intent_label == "shutdown_system":
         # Intención conocida pero sensible: se construye la Action y el
         # corte lo debe hacer Safety (defensa en profundidad), no el Intent.

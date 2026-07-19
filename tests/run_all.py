@@ -18,6 +18,7 @@ SUITE = [
     "test_music_player.py",
     "test_auth.py",
     "test_spotify_backend.py",
+    "test_podcast_intent.py",
 ]
 
 
