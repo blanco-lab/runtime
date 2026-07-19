@@ -20,21 +20,22 @@ LEYENDA DE ESTADOS
 TAREAS / PIEZAS
 ═══════════════════════════════════════════
 
-## EN CURSO
+## EN REVISIÓN
 
 [HQ-001] Horizon HQ — infraestructura de coordinación
-  dueño: Hermes  estado: EN CURSO  atlas: aprobado (ADR-0011)
-  hijos: ADR-0011 (✓), DESIGN-HQ (✓), board.md (✓ este), dashboard `hq serve` (PROPUESTA)
+  dueño: Hermes  estado: EN REVISIÓN (aprobada v1, fase de uso real)  atlas: aprobado (ADR-0011/0012)
+  hijos: ADR-0011 (✓), DESIGN-HQ (✓), board.md (✓), ADR-0012 (✓)
   objetivo: eliminar cartero; Atlas/Hermes/Codex consultan HQ directo.
 
-## APROBADA (esperando ejecución)
-
-[HQ-002] Dashboard profesional de HQ (`hq serve`)
-  dueño: Hermes  estado: APROBADA  atlas: aprobado (ADR-0011 + DESIGN-HQ)
-  diseño: web local dark (Linear/Vercel), lee hq/, paneles + tarjetas por estado.
-  nota: tecnología diferida; v1 en python+HTML/CSS vanilla.
-
 ## CONGELADA
+
+[HQ-002] Dashboard profesional de HQ (`hq serve` v1)
+  dueño: Hermes  estado: CONGELADA  atlas: aprobado (ADR-0011 + ADR-0012)
+  diseño: web local dark (Linear/Vercel), lee hq/ vía API, paneles + tarjetas.
+  nota: CONGELADA tras aprobación. Fase de USO REAL. No ampliar hasta que
+  el uso lo demande (crecimiento guiado por uso, no por hipótesis).
+  principio permanente: Dashboard NUNCA toca FS; Git = fuente única.
+  visión arranque: systemd arrancará HORIZON, no HQ (HQ es componente).
 
 [RTC-001] music_player (capability)
   dueño: Hermes  estado: CONGELADA  atlas: AR-002 aprobado+frozen
@@ -49,6 +50,12 @@ TAREAS / PIEZAS
 [ADR-0010] Modelo de dominio (no catálogo)
   dueño: Hermes  estado: CONGELADA (cerrada)  atlas: aprobado
   nota: respaldo catalog/ eliminado 2026-07-19.
+
+[ADR-0011] Horizon HQ (3 capas + dashboard)
+  dueño: Hermes  estado: CONGELADA  atlas: aprobado
+
+[ADR-0012] Principios permanentes de HQ (post v1)
+  dueño: Hermes  estado: CONGELADA  atlas: aprobado
 
 [ADR-0004] Backend agnóstico (Capability ≠ REST)
   dueño: Hermes  estado: CONGELADA  atlas: aprobado
