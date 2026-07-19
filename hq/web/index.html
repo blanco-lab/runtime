@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Horizon HQ — Puente de Mando</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#0a0a0c; --bg-2:#111114; --bg-3:#16161a; --line:#232328;
+  --txt:#e6e6ea; --txt-2:#9a9aa3; --txt-3:#62626b;
+  --accent:#7c6cff; --accent-2:#5b8cff; --ok:#3fb950; --warn:#e3b341;
+  --bad:#f85149; --info:#58a6ff; --radius:12px; --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:'Inter',system-ui,sans-serif;
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+.sidebar{position:fixed;top:0;left:0;width:230px;height:100vh;background:var(--bg-2);
+  border-right:1px solid var(--line);padding:22px 16px;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;
+  letter-spacing:.3px;margin-bottom:4px}
+.brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 12px var(--accent)}
+.brand-sub{font-size:11px;color:var(--txt-3);margin-bottom:22px;font-family:var(--mono)}
+.nav{display:flex;flex-direction:column;gap:2px;margin-top:auto}
+.nav button{background:transparent;border:0;color:var(--txt-2);text-align:left;
+  padding:9px 11px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;
+  display:flex;justify-content:space-between;align-items:center;transition:.12s}
+.nav button:hover{background:var(--bg-3);color:var(--txt)}
+.nav button.active{background:var(--bg-3);color:var(--txt);box-shadow:inset 2px 0 0 var(--accent)}
+.nav .badge{font-size:10px;background:var(--bg);color:var(--txt-3);padding:1px 7px;
+  border-radius:20px;font-family:var(--mono)}
+.main{margin-left:230px;padding:34px 40px;max-width:1100px}
+.head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:26px}
+.head h1{font-size:22px;font-weight:600;letter-spacing:-.2px}
+.head .src{font-size:11px;color:var(--txt-3);font-family:var(--mono)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:30px}
+.card{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.card .n{font-size:26px;font-weight:700;font-family:var(--mono);letter-spacing:-1px}
+.card .l{font-size:11px;color:var(--txt-2);text-transform:uppercase;letter-spacing:.6px;margin-top:3px}
+.card.alert{border-color:#3a2a2a}.card.alert .n{color:var(--bad)}
+.section h2{font-size:13px;text-transform:uppercase;letter-spacing:.7px;color:var(--txt-2);
+  margin:26px 0 14px;font-weight:600}
+.col{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);padding:14px 14px 8px;display:flex;flex-direction:column;min-height:120px}
+.col h3{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--txt-2);
+  margin-bottom:10px;display:flex;justify-content:space-between}
+.col h3 .c{font-family:var(--mono);color:var(--txt-3)}
+.col .it{background:var(--bg-3);border:1px solid var(--line);border-radius:8px;padding:9px 11px;
+  margin-bottom:7px;font-size:12.5px;display:flex;flex-direction:column;gap:2px}
+.col .it .id{font-family:var(--mono);font-size:10px;color:var(--accent-2)}
+.col .it .ti{color:var(--txt)}
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(200px,1fr);gap:12px;overflow-x:auto;padding-bottom:8px}
+table{width:100%;border-collapse:collapse;margin-top:4px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px}
+th{color:var(--txt-2);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+tr:hover td{background:var(--bg-2)}
+.st{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line)}
+.st.CONGELADA{color:var(--ok);border-color:#1f3a25}
+.st.EN_CURSO,.st.APROBADA{color:var(--info);border-color:#1c2f4a}
+.st.PROPUESTA,.st.DISEÑO{color:var(--warn);border-color:#3a3320}
+.st.IDEA{color:var(--txt-3)}
+.list .row{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.list .row .t{font-size:13px}
+.list .row .p{font-family:var(--mono);font-size:11px;color:var(--accent-2)}
+.loading{color:var(--txt-3);font-family:var(--mono);font-size:12px}
+.empty{color:var(--txt-3);font-style:italic;font-size:12px;padding:8px 2px}
+.footer{margin-top:40px;font-size:11px;color:var(--txt-3);font-family:var(--mono);border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><span class="dot"></span>Horizon HQ</div>
+  <div class="brand-sub">puente de mando · v1</div>
+  <nav class="nav" id="nav">
+    <button data-view="overview" class="active">Resumen</button>
+    <button data-view="board">Board <span class="badge" id="b-board">·</span></button>
+    <button data-view="adrs">Decisiones</button>
+    <button data-view="principles">Principios</button>
+    <button data-view="reports">Informes</button>
+    <button data-view="roadmap">Roadmap</button>
+  </nav>
+</aside>
+
+<main class="main">
+  <div class="head">
+    <h1 id="view-title">Resumen</h1>
+    <span class="src">fuente: git · hq/</span>
+  </div>
+  <div id="content"></div>
+  <div class="footer">Horizon HQ · Runtime/Horizon · dashboard lee API interna (nunca FS) · ADR-0011</div>
+</main>
+
+<script>
+const $ = (s,r=document)=>r.querySelector(s);
+const viewTitles={overview:"Resumen",board:"Board",adrs:"Decisiones (ADRs)",
+  principles:"Principios rectores",reports:"Informes",roadmap:"Roadmap activo"};
+async function api(p){const r=await fetch(p);return r.json();}
+function esc(s){return (s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+const views={
+  async overview(c){
+    const s=await api("/api/state");
+    const rm=await api("/api/roadmap");
+    const cards=`
+      <div class="cards">
+        <div class="card"><div class="n">${s.counts.adrs}</div><div class="l">ADRs</div></div>
+        <div class="card"><div class="n">${s.counts.principles}</div><div class="l">Principios</div></div>
+        <div class="card"><div class="n">${s.counts.reports}</div><div class="l">Informes</div></div>
+        <div class="card"><div class="n">${s.counts.board_sections}</div><div class="l">Secciones board</div></div>
+        <div class="card ${s.has_blockers?'alert':''}"><div class="n">${s.has_blockers?'⚠':'✓'}</div><div class="l">Bloqueos</div></div>
+        <div class="card"><div class="n">${rm.total_active}</div><div class="l">Activas</div></div>
+      </div>`;
+    c.innerHTML=cards+`<div class="section"><h2>Estado del proyecto</h2>
+      <div class="list"><div class="row"><span class="t">Runtime — motor de ejecución (congelado p/ capabilities)</span><span class="p">stateless</span></div>
+      <div class="row"><span class="t">Horizon Agent — agente conversacional (memoria)</span><span class="p">diseño</span></div>
+      <div class="row"><span class="t">Horizon HQ — coordinación del equipo</span><span class="p">en curso</span></div></div></div>`;
+  },
+  async board(c){
+    const b=await api("/api/board");
+    const cols=b.states.map(st=>{
+      const items=b.sections[st]||[];
+      const its=items.length?items.map(i=>`<div class="it"><span class="id">${esc(i.id)}</span><span class="ti">${esc(i.title)}</span></div>`).join(""):`<div class="empty">—</div>`;
+      return `<div class="col"><h3>${esc(st.replace('_',' '))}<span class="c">${items.length}</span></h3>${its}</div>`;
+    }).join("");
+    c.innerHTML=`<div class="board">${cols}</div>`;
+    $("#b-board").textContent=b.states.reduce((a,_,i)=>a+(b.sections[b.states[i]]||[]).length,0);
+  },
+  async adrs(c){
+    const d=await api("/api/adrs");
+    c.innerHTML=`<div class="list">${d.adrs.map(a=>`<div class="row"><span class="t">${esc(a.title)}</span><span class="p">${esc(a.id)} · ${esc(a.status)}</span></div>`).join("")||'<div class="empty">sin ADRs</div>'}</div>`;
+  },
+  async principles(c){
+    const d=await api("/api/principles");
+    c.innerHTML=`<div class="list">${d.principles.map(p=>`<div class="row"><span class="t">${esc(p.title)}</span><span class="p">${esc(p.id)}</span></div>`).join("")||'<div class="empty">sin principios</div>'}</div>`;
+  },
+  async reports(c){
+    const d=await api("/api/reports");
+    c.innerHTML=`<div class="list">${d.reports.map(r=>`<div class="row"><span class="t">${esc(r.title)}</span><span class="p">${esc(r.id)}</span></div>`).join("")||'<div class="empty">sin informes</div>'}</div>`;
+  },
+  async roadmap(c){
+    const r=await api("/api/roadmap");
+    c.innerHTML=`<div class="section"><h2>Piezas activas (no congeladas/archivadas)</h2>
+      <div class="list">${r.active.map(i=>`<div class="row"><span class="t">${esc(i.title)}</span><span class="p">${esc(i.id)} · ${esc(i.state)}</span></div>`).join("")||'<div class="empty">sin activas</div>'}</div></div>`;
+  }
+};
+
+async function show(v){
+  $("#view-title").textContent=viewTitles[v];
+  $$(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===v));
+  const c=$("#content");c.innerHTML='<div class="loading">cargando…</div>';
+  try{await (views[v]||views.overview)(c);}catch(e){c.innerHTML='<div class="loading">error: '+esc(e.message)+'</div>';}
+}
+function $$(s,r=document){return [...r.querySelectorAll(s)];}
+$$(".nav button").forEach(b=>b.onclick=()=>show(b.dataset.view));
+show("overview");
+</script>
+</body>
+</html>
