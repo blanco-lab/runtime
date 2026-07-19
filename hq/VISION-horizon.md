@@ -48,3 +48,9 @@ Horizon será quien le dé vida.
 
 Visión a madurar entre Blanco, Atlas y Hermes mientras se construye.
 No se implementa nada de Horizon todavía.
+
+## Principio rector relacionado
+
+ZUB (Zero User Burden) rige todo el proyecto: minimizar la carga sobre el
+usuario (autodescubrir → reutilizar → autoconfigurar → preguntar solo si
+no hay alternativa). Ver `hq/principles/PRINCIPLE-0001-ZUB.md`.

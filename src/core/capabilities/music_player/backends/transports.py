@@ -6,7 +6,12 @@ pero internamente usa DOS transportes y elige según el tipo de _play:
 - SpotifyCLITransport: usa el CLI `spotify_player` (tracks). Hoy es el
   mecanismo por defecto para música (ya verificado, REAL).
 - SpotifyWebApiTransport: usa la Spotify Web API (HTTPS) para lo que el
-  CLI no cubre — concretamente podcasts (shows/episodes).
+  CLI no cubre — podcasts (shows/episodes) y listados.
+
+PRINCIPIO (ajuste de Atlas, revisión podcasts): el backend NO interpreta
+lenguaje natural ni decide play/list. Expone primitivas TÉCNICAS puras:
+play_show, play_episode, search_episode, list_episodes. Quién invoca qué
+es decisión del Intent (y mañana Horizon), no del backend.
 
 La Capability NO sabe qué transporte se usa (ADR-0004). SpotifyWebApi
 recibe por INYECCIÓN un token (resuelto vía infra de auth ADR-0008) y un
@@ -26,7 +31,7 @@ from typing import Callable
 # --- transporte CLI (spotify_player) ---
 
 def _run_cli(args: list[str], retries: int = 3) -> subprocess.CompletedProcess:
-    """Ejecuta spotify_player con reintentos ante fallos de red (igual que antes)."""
+    """Ejecuta spotify_player con reintentos ante fallos de red."""
     import time
     last_err = None
     for attempt in range(retries):
@@ -72,7 +77,8 @@ class SpotifyCLITransport:
                     "track_id": track_id}
         return {"ok": True}
 
-    def search_show(self, query: str) -> dict | None:
+    @staticmethod
+    def search_show(query: str) -> dict | None:
         """Busca un show (podcast). El CLI lo encuentra aunque no lo reproduzca."""
         try:
             res = _run_cli(["search", query])
@@ -84,20 +90,18 @@ class SpotifyCLITransport:
             data = json.loads(res.stdout)
             return data["shows"][0]
         except (json.JSONDecodeError, KeyError, IndexError):
-            # La search unificada a veces no trae "shows"; lo intentamos
-            # con un término explícito. Si sigue sin haber, devolvemos None.
             return None
 
 
 # --- transporte Web API (podcasts) ---
 
 class SpotifyWebApiTransport:
-    """Reproduce podcasts (shows) vía Spotify Web API.
+    """Primitivas de podcast vía Spotify Web API.
 
     - Token: inyectado (resuelto por la infra de auth ADR-0008). No sabe
       si viene de spotify_player o de AuthManager.
-    - device_id: inyectado (ADR-0007 A3). No sabe de dónde procede
-      (hoy del daemon, mañana de Spotify Connect/móvil/etc.).
+    - device_id: inyectado (ADR-0007 A3). No sabe de dónde procede.
+    - El backend llama a estas primitivas; NO decide por lenguaje natural.
     """
 
     BASE = "https://api.spotify.com/v1"
@@ -108,23 +112,67 @@ class SpotifyWebApiTransport:
         self.device_id = device_id
         self._http = http or urllib.request.urlopen
 
-    def play_show(self, show_uri: str) -> dict:
-        url = f"{self.BASE}/me/player/play"
-        if self.device_id:
-            url += f"?device_id={self.device_id}"
-        body = json.dumps({"context_uri": show_uri}).encode()
+    def _put(self, url: str, body: dict) -> dict:
         req = urllib.request.Request(
-            url, data=body, method="PUT",
+            url, data=json.dumps(body).encode(), method="PUT",
             headers={"Authorization": f"Bearer {self.token}",
                      "Content-Type": "application/json"},
         )
         try:
             self._http(req, timeout=20)
-            return {"ok": True, "message": f"Reproduciendo podcast: {show_uri}",
-                    "show_uri": show_uri}
+            return {"ok": True}
         except urllib.error.HTTPError as e:
             detail = e.read().decode() if e.fp else ""
-            return {"ok": False,
-                    "message": f"Error Web API ({e.code}): {detail[:200]}"}
+            return {"ok": False, "message": f"Error Web API ({e.code}): {detail[:200]}"}
         except urllib.error.URLError as e:
             return {"ok": False, "message": f"Error de red: {e.reason}"}
+
+    def _get(self, url: str) -> dict:
+        req = urllib.request.Request(
+            url, headers={"Authorization": f"Bearer {self.token}"}
+        )
+        try:
+            with self._http(req, timeout=20) as r:
+                return {"ok": True, "data": json.loads(r.read())}
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode() if e.fp else ""
+            return {"ok": False, "message": f"Error Web API ({e.code}): {detail[:200]}"}
+        except urllib.error.URLError as e:
+            return {"ok": False, "message": f"Error de red: {e.reason}"}
+
+    # --- primitivas (sin NL, sin decisión de play/list) ---
+
+    def play_show(self, show_uri: str) -> dict:
+        url = f"{self.BASE}/me/player/play"
+        if self.device_id:
+            url += f"?device_id={self.device_id}"
+        r = self._put(url, {"context_uri": show_uri})
+        if r.get("ok"):
+            return {"ok": True, "message": f"Reproduciendo show: {show_uri}",
+                    "show_uri": show_uri}
+        return r
+
+    def play_episode(self, episode_uri: str) -> dict:
+        url = f"{self.BASE}/me/player/play"
+        if self.device_id:
+            url += f"?device_id={self.device_id}"
+        r = self._put(url, {"uris": [episode_uri]})
+        if r.get("ok"):
+            return {"ok": True, "message": f"Reproduciendo episodio: {episode_uri}",
+                    "episode_uri": episode_uri}
+        return r
+
+    def search_episode(self, show_id: str, query: str) -> list[dict]:
+        """Devuelve episodes del show cuyo título contiene `query`."""
+        listing = self.list_episodes(show_id, limit=50, offset=0)
+        if not listing.get("ok"):
+            return []
+        return [e for e in listing["data"]["items"]
+                if query.lower() in (e.get("name") or "").lower()]
+
+    def list_episodes(self, show_id: str, limit: int = 10, offset: int = 0) -> dict:
+        url = f"{self.BASE}/shows/{show_id}/episodes?limit={limit}&offset={offset}"
+        r = self._get(url)
+        if not r.get("ok"):
+            return r
+        return {"ok": True, "data": r["data"]}

@@ -1,21 +1,30 @@
 """Backend Spotify para music_player (evolucionado, Parte B / ADR-0008).
 
-Este backend es el ÚNICO que cambia en la Parte B. La Capability
-music_player sigue CONGELADA: su interfaz `play(query)` NO cambia. El
-backend internamente:
+Este backend es el ÚNICO que cambia. La Capability music_player sigue
+CONGELADA: su interfaz `play(query)` NO cambia. El backend internamente
+resuelve credenciales (ADR-0008) y delega en transportes.
 
-- Resuelve una credencial válida usando la infra de auth (ADR-0008):
-  ExistingCredentialProvider (token de spotify_player) -> si no,
-  RuntimeCredentialProvider (AuthManager/PKCE).
-- Para música (track): usa SpotifyCLITransport (spotify_player CLI),
-  igual que antes (REAL, ya verificado).
-- Para podcast (show): usa SpotifyWebApiTransport (Web API) con el token
-  resuelto y un device_id inyectado (ADR-0007 A3). El CLI no reproduce
-  podcasts; la Web API sí.
+AJUSTE DE ATLAS (revisión podcasts): el backend NO interpreta lenguaje
+natural ni decide play/list. Expone PRIMITIVAS TÉCNICAS PURAS:
+    play_show(show_uri)
+    play_episode(episode_uri)
+    search_episode(show_id, query)
+    list_episodes(show_id, limit, offset)
+Quién invoca qué es decisión del Intent (y mañana Horizon), no del
+backend. Este módulo incluye un `BackendDispatcher` que traduce una
+petición ya estructurada (no NL crudo) a la primitiva correcta; el NL lo
+resuelve el Intent aguas arriba.
 
-La Capability NO sabe qué transporte se usa (ADR-0004). El token y el
-device_id se inyectan; el backend no conoce su origen.
+- Resolución de credencial (ADR-0008): ExistingCredentialProvider (token
+  de spotify_player) -> si no, RuntimeCredentialProvider (AuthManager/PKCE).
+- Para música (track): SpotifyCLITransport (CLI), igual que antes (REAL).
+- Para podcast: SpotifyWebApiTransport con token + device_id inyectados
+  (ADR-0007 A3). El CLI no reproduce podcasts; la Web API sí.
+
+La Capability NO sabe qué transporte se usa (ADR-0004).
 """
+from __future__ import annotations
+
 import json
 import shutil
 import subprocess
@@ -33,7 +42,6 @@ from ....auth.providers import SpotifyProvider
 
 
 def _run_cli(args: list[str], retries: int = 3) -> subprocess.CompletedProcess:
-    """Ejecuta spotify_player con reintentos ante fallos de red (igual que antes)."""
     import time
     last_err = None
     for attempt in range(retries):
@@ -51,7 +59,7 @@ def _run_cli(args: list[str], retries: int = 3) -> subprocess.CompletedProcess:
 
 
 class SpotifyBackend(Backend):
-    """Backend Spotify con dos transportes internos (ADR-0004)."""
+    """Backend Spotify con primitivas separadas (ADR-0004 / ajuste Atlas)."""
 
     def __init__(self, token_resolver: Callable[[], str | None] | None = None,
                  device_id_resolver: Callable[[], str | None] | None = None,
@@ -72,7 +80,6 @@ class SpotifyBackend(Backend):
         return cred.token if cred else None
 
     def _default_device(self) -> str | None:
-        # A3: device_id desacoplado. Hoy del daemon vía Web API.
         token = self._token_resolver()
         if not token:
             return None
@@ -90,25 +97,40 @@ class SpotifyBackend(Backend):
             return None
         return None
 
-    # --- API pública de la Capability ( congelada ) ---
+    def _api(self) -> SpotifyWebApiTransport:
+        token = self._token_resolver()
+        if not token:
+            raise RuntimeError("Sin credencial de Spotify para Web API.")
+        return SpotifyWebApiTransport(token, self._device_resolver(), http=self._http)
+
+    # --- PRIMITIVAS (sin NL, sin decisión de play/list) ---
+
+    def play_show(self, show_uri: str) -> dict:
+        return self._api().play_show(show_uri)
+
+    def play_episode(self, episode_uri: str) -> dict:
+        return self._api().play_episode(episode_uri)
+
+    def search_episode(self, show_id: str, query: str) -> list[dict]:
+        return self._api().search_episode(show_id, query)
+
+    def list_episodes(self, show_id: str, limit: int = 10, offset: int = 0) -> dict:
+        return self._api().list_episodes(show_id, limit, offset)
+
+    # --- compatibilidad: play(query) sigue siendo la entrada de la Capability ---
+    # NOTA: aquí el backend hace un enrutado mínimo track-vs-show SOLO para
+    # mantener la interfaz play(query) de la Capability congelada. La
+    # selección fina por episodio/título/número la resuelve el dispatcher
+    # (ver BackendDispatcher) invocado por el Intent aguas arriba.
     def play(self, query: str) -> dict:
         if not query:
             return {"ok": False, "message": "Query vacía."}
-        q = query.lower()
-        # Si el usuario pide explícitamente un podcast, forzamos ruta show.
-        wants_podcast = "podcast" in q
-        if wants_podcast:
-            show = self.cli.search_show(query)
-            if show and show.get("id"):
-                return self._play_podcast(show, query)
-            return {"ok": False, "message": "No se encontró ese podcast."}
-        # Si no, música: priorizamos track. Solo si no hay track, show.
         track = self.cli.search_track(query)
         if track and track.get("id"):
             return self._play_track(query)
         show = self.cli.search_show(query)
         if show and show.get("id"):
-            return self._play_podcast(show, query)
+            return self.play_show(f"spotify:show:{show['id']}")
         return {"ok": False, "message": "No se encontró ningún resultado."}
 
     def _play_track(self, query: str) -> dict:
@@ -124,22 +146,6 @@ class SpotifyBackend(Backend):
                     "track_id": track_id, "name": name, "artists": artists}
         return {"ok": True, "message": f"Reproduciendo: {name} — {artists}",
                 "track_id": track_id, "name": name, "artists": artists}
-
-    def _play_podcast(self, show: dict, query: str) -> dict:
-        token = self._token_resolver()
-        if not token:
-            return {"ok": False,
-                    "message": "Sin credencial de Spotify para reproducir podcasts. "
-                               "Ejecuta 'runtime auth spotify' o usa spotify_player."}
-        device_id = self._device_resolver()
-        transport = SpotifyWebApiTransport(token, device_id, http=self._http)
-        show_uri = f"spotify:show:{show['id']}"
-        name = show.get("name", "?")
-        r = transport.play_show(show_uri)
-        if r.get("ok"):
-            return {"ok": True, "message": f"Reproduciendo podcast: {name}",
-                    "show_uri": show_uri, "name": name}
-        return r
 
     # --- controles (CLI, igual que antes) ---
     def _simple(self, args: list[str], ok_msg: str) -> dict:
@@ -176,3 +182,28 @@ class SpotifyBackend(Backend):
 
 # Reexport para no romper importaciones existentes (compatibilidad).
 SpotifyPlayerBackend = SpotifyBackend
+
+
+class BackendDispatcher:
+    """Traduce una petición ESTRUCTURADA (no NL crudo) a la primitiva.
+
+    El NL lo resuelve el Intent aguas arriba. Aquí solo enruta según el
+    tipo de petición. Esto mantiene el backend agnóstico al lenguaje
+    natural (ajuste de Atlas).
+    """
+
+    def __init__(self, backend: SpotifyBackend):
+        self.b = backend
+
+    def dispatch(self, req: dict) -> dict:
+        kind = req.get("kind")
+        if kind == "play_show":
+            return self.b.play_show(req["uri"])
+        if kind == "play_episode":
+            return self.b.play_episode(req["uri"])
+        if kind == "search_episode":
+            return {"ok": True, "items": self.b.search_episode(req["show_id"], req["query"])}
+        if kind == "list_episodes":
+            return self.b.list_episodes(req["show_id"], req.get("limit", 10),
+                                        req.get("offset", 0))
+        return {"ok": False, "message": f"Primitiva desconocida: {kind}"}

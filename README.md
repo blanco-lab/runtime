@@ -41,6 +41,17 @@ no afecta al pipeline.
 
 Ver: `docs/capabilities/music_player.md` y `hq/decisions/ADR-0004.md`.
 
+### Principio rector: ZUB (Zero User Burden)
+
+Runtime y Horizon minimizan sistemáticamente la carga sobre el usuario:
+autodescubrir → reutilizar → autoconfigurar → preguntar solo si no hay
+alternativa segura. Ver: `hq/principles/PRINCIPLE-0001-ZUB.md`.
+
+### Visión a largo plazo: Runtime (la Shell) y Horizon (el Ghost)
+
+Runtime es el motor de ejecución; Horizon será el agente permanente que
+lo usa. Ver: `hq/VISION-horizon.md`.
+
 ### Verificación
 
 Comando canónico (ejecuta toda la batería de tests):

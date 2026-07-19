@@ -37,16 +37,34 @@ def _fake_cli_with_show():
     return cli
 
 
-def _fake_http_put(captured):
-    """Simula urllib.request.urlopen para PUT /me/player/play."""
+def _fake_http(flag):
+    """Mock de urlopen que distingue PUT (play) de GET (list_episodes).
+
+    flag: dict donde guardamos la última URL (para asserts de play).
+    Para GET /shows/<id>/episodes?... devuelve items con 'offset' creciente
+    para validar la paginación hacia atrás.
+    """
+    import re
     def _fake(req, timeout=20):
-        captured["url"] = req.full_url
-        captured["headers"] = dict(req.headers)
-        captured["data"] = req.data
-        # Respuesta OK (204 No Content en Web API de play).
+        flag["url"] = req.full_url
+        method = req.get_method() if hasattr(req, "get_method") else getattr(req, "method", "GET")
+        if method == "PUT":
+            flag["data"] = getattr(req, "data", None)
+            flag["headers"] = dict(getattr(req, "headers", {}) or {})
+            resp = mock.MagicMock()
+            resp.__enter__.return_value = resp
+            resp.status = 204
+            resp.read.return_value = b""
+            return resp
+        # GET: list_episodes
+        m = re.search(r"offset=(\d+)", req.full_url)
+        base = int(m.group(1)) if m else 0
+        items = [{"name": f"Ep {base + i} - Atom", "offset": base + i}
+                 for i in range(10)]
+        body = json.dumps({"items": items}).encode()
         resp = mock.MagicMock()
-        resp.status = 204
-        resp.read.return_value = b""
+        resp.__enter__.return_value = resp
+        resp.read.return_value = body
         return resp
     return _fake
 
@@ -61,7 +79,7 @@ def main() -> int:
     backend._token_resolver = lambda: "TOK"
     backend._device_resolver = lambda: "DEV"
     captured = {}
-    backend._http = _fake_http_put(captured)
+    backend._http = _fake_http(captured)
     res = backend.play("pon un podcast de monos estocasticos")
     print("  respuesta:", res)
     ok = ok and res.get("ok") is True
@@ -79,7 +97,7 @@ def main() -> int:
     backend2._token_resolver = lambda: "TOK"
     backend2._device_resolver = lambda: None  # viene de donde sea, hoy None
     cap2 = {}
-    backend2._http = _fake_http_put(cap2)
+    backend2._http = _fake_http(cap2)
     backend2.play("podcast x")
     ok = ok and "device_id" not in cap2["url"]
     print("  [OK]" if ok else "  [FAIL]", "device_id opcional (inyectado, no acoplado)")
@@ -104,6 +122,38 @@ def main() -> int:
     cred2 = resolve_credential(ecp2, rcp)
     ok = ok and cred2 is not None and cred2.token == "RUNTIME_TOK"
     print("  [OK]" if ok else "  [FAIL]", "fallback a RuntimeCredentialProvider")
+
+    print("\n== Primitivas separadas del backend (ajuste Atlas: sin NL) ==")
+    # El backend expone play_show/play_episode/search_episode/list_episodes.
+    # El dispatcher traduce una petición ESTRUCTURADA (no NL) a la primitiva.
+    cap3 = {}
+    bk = SpotifyBackend()
+    bk._token_resolver = lambda: "TOK"
+    bk._device_resolver = lambda: "DEV"
+    bk._http = _fake_http(cap3)
+    disp = __import__("src.core.capabilities.music_player.backends.spotify_player",
+                      fromlist=["BackendDispatcher"]).BackendDispatcher(bk)
+    # list_episodes devuelve items con offset (paginación hacia atrás).
+    show_id = "SHOW123"
+    list0 = disp.dispatch({"kind": "list_episodes", "show_id": show_id,
+                           "limit": 10, "offset": 0})
+    ok = ok and list0.get("ok") is True and len(list0["data"]["items"]) == 10
+    # "más" -> offset 10 (Horizon recordaría el offset; aquí lo pasamos)
+    list10 = disp.dispatch({"kind": "list_episodes", "show_id": show_id,
+                            "limit": 10, "offset": 10})
+    ok = ok and list10.get("ok") is True and list10["data"]["items"][0]["offset"] == 10
+    print("  [OK]" if ok else "  [FAIL]",
+          "list_episodes con limit/offset (paginación hacia atrás)")
+
+    # play_episode vía dispatcher
+    ep = disp.dispatch({"kind": "play_episode", "uri": "spotify:episode:EP9"})
+    ok = ok and ep.get("ok") is True and b"EP9" in cap3.get("data", b"")
+    print("  [OK]" if ok else "  [FAIL]", "play_episode vía dispatcher")
+
+    # search_episode usa list_episodes internamente
+    found = disp.dispatch({"kind": "search_episode", "show_id": show_id, "query": "Atom"})["items"]
+    ok = ok and any("Atom" in it["name"] for it in found)
+    print("  [OK]" if ok else "  [FAIL]", "search_episode filtra por título")
 
     print("\n== Credential genérica (ADR-0007 A1: Auth ≠ OAuth) ==")
     c = Credential(token="X", metadata={"source": "test"})
