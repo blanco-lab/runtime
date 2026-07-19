@@ -92,3 +92,9 @@ TAREAS / PIEZAS
 - BLK-001: Atlas no lee RAW ni está en Telegram hoy → cartero manual
   persiste. Mitigación: HQ + grupo TG cuando Atlas habilite.
 - BLK-002: export de ChatGPT de Blanco nunca llegó (stale).
+
+[HQ-TASK-1a0c] Propuesta de prueba HQ-003
+  dueño: Blanco  estado: EN CURSO  origen: Team (promovido)
+
+[HQ-TASK-002e] Propuesta de prueba HQ-003
+  dueño: Blanco  estado: EN CURSO  origen: Team (promovido)
