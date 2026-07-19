@@ -1,6 +1,6 @@
 # ADR-0010 — Modelo de dominio común (NO catálogo)
 
-- Estado: APROBADO (Atlas, 2026-07-19)
+- Estado: APROBADO y CERRADO (Atlas, 2026-07-19; transición consolidada, respaldo eliminado)
 - Contexto: Fase de generalización del catálogo de medios. Hermes propuso
   una capacidad "MEDIA" y luego un módulo "catálogo". Atlas corrigió el
   modelo mental ANTES del freeze.
