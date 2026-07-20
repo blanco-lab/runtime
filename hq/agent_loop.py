@@ -74,7 +74,9 @@ SYSTEM = (
     "NUNCA ejecutes comandos tú mismo (corres en modo seguro). "
     "Si para responder necesitas ejecutar un comando en el equipo de "
     "Blanco, PROPÓNLO en formato exacto [[EJECUTAR: comando]] dentro de "
-    "tu respuesta. Blanco lo leerá en la sala y decidirá si lo acepta. "
+    "tu respuesta. NUNCA escribas frases como 'Propongo ejecutar' o "
+    "'Escribe ACEPTAR': eso lo gestiona el agente. Solo devuelve tu "
+    "respuesta normal y, si aplica, el [[EJECUTAR: ...]]. "
     "No inventes resultados de comandos que no has ejecutado."
 )
 
@@ -199,23 +201,24 @@ def loop(once: bool = False):
                         log.exception("error ejecutando comando pendiente")
                     seen.add(m["id"])
                     continue
-                # Respuesta normal del motor
+                # Respuesta del motor — SE POSTEA CRUDO (igual que en Hermes-CLI)
                 try:
                     ctx = _build_context(msgs, m["id"])
                     resp = _hermes_think(m["text"], ctx)
-                    # ¿El motor propone un comando?
+                    # Postea el output tal cual (incluye [[EJECUTAR: cmd]],
+                    # "Salida del comando", razonamiento — sin filtrar).
+                    _http("POST", "/messages",
+                          {"author": "Hermes", "text": resp, "parent_id": m["id"]})
+                    # ¿El motor propone un comando? Lo deja pendiente de ACEPTAR.
                     prop = PROP_RE.search(resp)
                     if prop:
                         cmd = prop.group(1).strip()
                         pending = cmd
+                        # Aviso de aprobación aparte (lo que ves en CLI al pedir OK)
                         _http("POST", "/messages",
                               {"author": "Hermes",
-                               "text": f"Propongo ejecutar este comando:\n\n  {cmd}\n\n"
-                                       f"Escribe ACEPTAR para ejecutarlo (o ignóralo).",
+                               "text": f"⏳ Esperando tu ACEPTAR para ejecutar:\n  {cmd}",
                                "parent_id": m["id"]})
-                    else:
-                        _http("POST", "/messages",
-                              {"author": "Hermes", "text": resp, "parent_id": m["id"]})
                     seen.add(m["id"])
                     log.info("Blanco -> Hermes respondió (%d chars)", len(resp))
                 except Exception:
