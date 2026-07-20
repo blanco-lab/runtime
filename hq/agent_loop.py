@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import shutil
 import subprocess
 import sys
@@ -70,9 +71,15 @@ SYSTEM = (
     "Eres Hermes, conectado a la sala 'Horizon Team' de Horizon HQ. "
     "Blanco (tu usuario) escribió en la sala. Responde de forma útil, "
     "concisa y en español (tú, singular). No uses markdown de botones. "
-    "Si la petición requiere ejecutar acciones en su equipo, díselo y "
-    "propón el paso, pero no inventes resultados."
+    "NUNCA ejecutes comandos tú mismo (corres en modo seguro). "
+    "Si para responder necesitas ejecutar un comando en el equipo de "
+    "Blanco, PROPÓNLO en formato exacto [[EJECUTAR: comando]] dentro de "
+    "tu respuesta. Blanco lo leerá en la sala y decidirá si lo acepta. "
+    "No inventes resultados de comandos que no has ejecutado."
 )
+
+# Patrón de propuesta de comando del motor
+PROP_RE = re.compile(r"\[\[EJECUTAR:\s*(.+?)\s*\]\]", re.DOTALL)
 
 
 def _build_context(msgs: list[dict], until_id: str) -> str:
@@ -137,27 +144,83 @@ def _hermes_think(text: str, context: str = "") -> str:
             pass
 
 
+def _load_state() -> dict:
+    if STATE.exists():
+        try:
+            return json.loads(STATE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_state(state: dict):
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps(state))
+
+
+def _run_command(cmd: str) -> str:
+    """Ejecuta un comando aprobado por Blanco, con el entorno completo de Blanco."""
+    try:
+        r = subprocess.run(
+            ["bash", "-lc", cmd],
+            capture_output=True, text=True, timeout=120,
+        )
+        out = (r.stdout or "").strip()
+        if not out and r.stderr:
+            out = (r.stderr or "").strip()
+        return f"$ {cmd}\n{out[:2000]}\n(exit_code {r.returncode})"
+    except subprocess.TimeoutExpired:
+        return f"$ {cmd}\n[TIMEOUT >120s]"
+    except Exception as e:
+        return f"$ {cmd}\n[error] {e}"
+
+
 def loop(once: bool = False):
-    seen = _load_seen()
+    state = _load_state()
+    seen = set(state.get("seen", []))
+    pending = state.get("pending")  # comando en espera de ACEPTAR
     while True:
         try:
             msgs = _http("GET", "/messages").get("messages", [])
             nuevos = [m for m in msgs if m["id"] not in seen
                       and m["author"] != "Hermes"]
             for m in nuevos:
+                text = m["text"].strip().lower()
+                # ¿Blanco acepta el comando pendiente?
+                if pending and text in ("aceptar", "sí", "si", "ok", "ejecutar", "yes"):
+                    try:
+                        salida = _run_command(pending)
+                        log.info("Blanco aceptó y se ejecutó: %s", pending)
+                        _http("POST", "/messages",
+                              {"author": "Hermes", "text": f"Ejecutado:\n{salida}",
+                               "parent_id": m["id"]})
+                        pending = None
+                    except Exception:
+                        log.exception("error ejecutando comando pendiente")
+                    seen.add(m["id"])
+                    continue
+                # Respuesta normal del motor
                 try:
-                    # Pasa el historial de la sala (memoria de conversación),
-                    # no solo el mensaje aislado, para que Hermes no "olvide"
-                    # lo hablado entre iteraciones.
                     ctx = _build_context(msgs, m["id"])
                     resp = _hermes_think(m["text"], ctx)
-                    _http("POST", "/messages",
-                          {"author": "Hermes", "text": resp, "parent_id": m["id"]})
-                    seen.add(m["id"])  # solo tras postear con éxito
+                    # ¿El motor propone un comando?
+                    prop = PROP_RE.search(resp)
+                    if prop:
+                        cmd = prop.group(1).strip()
+                        pending = cmd
+                        _http("POST", "/messages",
+                              {"author": "Hermes",
+                               "text": f"Propongo ejecutar este comando:\n\n  {cmd}\n\n"
+                                       f"Escribe ACEPTAR para ejecutarlo (o ignóralo).",
+                               "parent_id": m["id"]})
+                    else:
+                        _http("POST", "/messages",
+                              {"author": "Hermes", "text": resp, "parent_id": m["id"]})
+                    seen.add(m["id"])
                     log.info("Blanco -> Hermes respondió (%d chars)", len(resp))
                 except Exception:
                     log.exception("error al responder mensaje %s", m["id"])
-            _save_seen(seen)
+            _save_state({"seen": sorted(seen), "pending": pending})
         except Exception:
             log.exception("error en sondeo")
         if once:
