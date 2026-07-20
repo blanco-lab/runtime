@@ -98,3 +98,6 @@ TAREAS / PIEZAS
 
 [HQ-TASK-002e] Propuesta de prueba HQ-003
   dueño: Blanco  estado: EN CURSO  origen: Team (promovido)
+
+[HQ-TASK-901a] Propuesta de prueba HQ-003
+  dueño: Blanco  estado: EN CURSO  origen: Team (promovido)

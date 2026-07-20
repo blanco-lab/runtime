@@ -88,7 +88,13 @@ def _build_context(msgs: list[dict], until_id: str) -> str:
 
 
 def _hermes_think(text: str, context: str = "") -> str:
-    """Invoca al motor real de Hermes (gratuito, credential Nous ya configurada)."""
+    """Invoca al motor real de Hermes (gratuito, credential Nous ya configurada).
+
+    Usa `bash -lc` para cargar el perfil COMPLETO de Blanco (no solo 3 vars),
+    porque `hermes` necesita el entorno de login (auth Nous/keyring) que el
+    daemon de systemd no tiene. El prompt va a un tempfile para evitar
+    problemas de quoting.
+    """
     hermes = shutil.which("hermes")
     if not hermes:
         return "[Hermes] motor no disponible (hermes CLI no encontrado)."
@@ -101,9 +107,14 @@ def _hermes_think(text: str, context: str = "") -> str:
         f"para no perder el hilo.\n{hist}"
         f"Mensaje actual de Blanco:\n{text}\n\nRespuesta de Hermes:"
     )
+    # tempfile con el prompt (evita quoting frágil)
+    tmp = WORKSPACE / f"prompt_{int(time.time()*1000)}.txt"
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    tmp.write_text(prompt, encoding="utf-8")
     try:
+        cmd = f'hermes -z "$(cat {tmp})" --safe-mode'
         r = subprocess.run(
-            [hermes, "-z", prompt, "--safe-mode"],
+            ["bash", "-lc", cmd],
             capture_output=True, text=True, timeout=THINK_TIMEOUT,
         )
         out = (r.stdout or "").strip()
@@ -119,6 +130,11 @@ def _hermes_think(text: str, context: str = "") -> str:
     except Exception as e:
         log.exception("hermes_think falló")
         return f"[Hermes] falló al invocar motor: {e}"
+    finally:
+        try:
+            tmp.unlink()
+        except Exception:
+            pass
 
 
 def loop(once: bool = False):
