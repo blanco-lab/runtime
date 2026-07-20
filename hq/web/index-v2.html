@@ -89,6 +89,10 @@ button{font-family:inherit;cursor:pointer}
 .thinking .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);
   animation:bp 1s infinite}
 @keyframes bp{0%,100%{opacity:.3}50%{opacity:1}}
+.stbar{font-size:12px;font-weight:600;padding:6px 10px;border-radius:8px;margin-bottom:10px;
+  display:inline-block}
+.stbar.idle{color:var(--ok);background:#10241a;border:1px solid #1f3a25}
+.stbar.busy{color:#e0b341;background:#241f10;border:1px solid #3a2f1f}
 .composer{display:flex;gap:8px;margin-top:auto}
 .composer input{flex:1;background:var(--bg3);border:1px solid var(--line);border-radius:8px;
   padding:10px 12px;color:var(--txt);font-family:inherit;font-size:13px;outline:none}
@@ -166,6 +170,7 @@ const V={
   },
   async team(c){
     c.innerHTML=`<div class="team-view"><div class="panel team-panel"><h2>Horizon Team · sala permanente</h2>
+      <div id="st" class="stbar">🟢 Hermes activo</div>
       <div id="msgs" class="msgs"></div>
       <div id="think" class="thinking" style="display:none"><span class="dot"></span><span>Hermes está pensando…</span></div>
       <div class="composer">
@@ -174,6 +179,7 @@ const V={
       </div></div></div>`;
     const box=$("#msgs");
     const think=$("#think");
+    const st=$("#st");
     window.__mt = window.__mt || {};
     const scrollEnd=()=>{box.scrollTop=box.scrollHeight;};
     const atBottom=()=>box.scrollHeight-box.scrollTop-box.clientHeight<40;
@@ -186,6 +192,8 @@ const V={
       const lastHermes=ms.filter(m=>m.author==="Hermes").pop();
       const thinking = lastBlanco && (!lastHermes || lastHermes.parent_id!==lastBlanco.id);
       think.style.display = thinking ? "flex" : "none";
+      st.textContent = thinking ? "🟡 Hermes procesando…" : "🟢 Hermes activo";
+      st.className = "stbar " + (thinking ? "busy" : "idle");
       box.innerHTML=ms.map(m=>`<div class="msg ${m.author==='Hermes'?'hermes':''} ${m.read?'read':'unread'}">
         ${(()=>{window.__mt[m.id]=m.text;return '';})()}
         <div class="mh"><span class="au">${esc(m.author)}</span>
