@@ -77,6 +77,13 @@ button{font-family:inherit;cursor:pointer}
 .msg .mact button{background:var(--bg2);border:1px solid var(--line2);color:var(--txt2);
   border-radius:6px;padding:3px 9px;font-size:11px}
 .msg .mact button:hover{border-color:var(--accent);color:var(--accent)}
+.msg.hermes{border:1px solid var(--accent);background:linear-gradient(180deg,#1a1822,#15151b);
+  box-shadow:0 0 0 1px rgba(124,108,255,.18)}
+.msg.hermes .au{color:var(--accent)}
+.msg .copy{margin-left:auto;background:var(--bg2);border:1px solid var(--line2);color:var(--txt2);
+  border-radius:6px;padding:1px 7px;font-size:12px;line-height:1.4;cursor:pointer}
+.msg .copy:hover{border-color:var(--accent);color:var(--accent)}
+.msg .copy.ok{color:var(--ok);border-color:#1f3a25}
 .thinking{display:flex;align-items:center;gap:8px;color:var(--accent);font-size:12px;
   font-style:italic;padding:8px 2px}
 .thinking .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);
@@ -167,8 +174,11 @@ const V={
       </div></div></div>`;
     const box=$("#msgs");
     const think=$("#think");
+    window.__mt = window.__mt || {};
     const scrollEnd=()=>{box.scrollTop=box.scrollHeight;};
+    const atBottom=()=>box.scrollHeight-box.scrollTop-box.clientHeight<40;
     const render=async()=>{
+      const wasBottom=atBottom(); const prevTop=box.scrollTop;
       const d=await api("/api/v2/team/messages");
       const ms=d.messages||[];
       // ¿Hermes está pensando? (mensaje de Blanco sin respuesta de Hermes después)
@@ -176,9 +186,11 @@ const V={
       const lastHermes=ms.filter(m=>m.author==="Hermes").pop();
       const thinking = lastBlanco && (!lastHermes || lastHermes.parent_id!==lastBlanco.id);
       think.style.display = thinking ? "flex" : "none";
-      box.innerHTML=ms.map(m=>`<div class="msg ${m.read?'read':'unread'}">
+      box.innerHTML=ms.map(m=>`<div class="msg ${m.author==='Hermes'?'hermes':''} ${m.read?'read':'unread'}">
+        ${(()=>{window.__mt[m.id]=m.text;return '';})()}
         <div class="mh"><span class="au">${esc(m.author)}</span>
           <span class="ts">${new Date(m.ts*1000).toLocaleString()}</span>
+          ${m.author==='Hermes'?'<button class="copy" data-id="'+m.id+'">📋</button>':''}
           ${m.read?'<span class="r">leído</span>':'<span class="ru">nuevo</span>'}</div>
         <div class="mt">${esc(m.text)}</div>
         <div class="mact">
@@ -192,11 +204,20 @@ const V={
       // marcar leídos
       const nuevos=ms.filter(m=>!m.read).map(m=>m.id);
       if(nuevos.length)await fetch("/api/v2/team/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:nuevos})});
-      scrollEnd();
+      if(wasBottom) scrollEnd(); else box.scrollTop=prevTop;
     };
     const send=async()=>{const t=$("#msg").value.trim();if(!t)return;await fetch("/api/v2/team/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({author:"Blanco",text:t})});$("#msg").value='';render();};
     $("#send").onclick=send;
     $("#msg").addEventListener("keydown",e=>{if(e.key==='Enter')send();});
+    box.addEventListener("click",async e=>{
+      const btn=e.target.closest(".copy"); if(!btn)return;
+      const id=btn.dataset.id, txt=window.__mt[id]||"";
+      try{await navigator.clipboard.writeText(txt);}catch(_){
+        const ta=document.createElement("textarea");ta.value=txt;document.body.appendChild(ta);
+        ta.select();document.execCommand("copy");ta.remove();}
+      const old=btn.textContent; btn.textContent="✓"; btn.classList.add("ok");
+      setTimeout(()=>{btn.textContent=old;btn.classList.remove("ok");},1500);
+    });
     render();
     stopPoll();
     _pollTimer=setInterval(render,3000);
