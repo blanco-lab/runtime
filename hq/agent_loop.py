@@ -33,7 +33,7 @@ STATE = WORKSPACE / "agent_state.json"
 LOG = WORKSPACE / "agent.log"
 API = "http://127.0.0.1:8765/api/v2/team"
 POLL = 5.0  # segundos
-THINK_TIMEOUT = 150  # s
+THINK_TIMEOUT = 240  # s (hermes -z gratis puede tardar; antes 150 daba timeouts)
 
 logging.basicConfig(
     filename=str(LOG), level=logging.INFO,
@@ -79,7 +79,7 @@ def _build_context(msgs: list[dict], until_id: str) -> str:
     """Historial de la sala hasta el mensaje actual (memoria de conversación)."""
     # mensajes anteriores al actual, en orden cronológico
     prev = [m for m in msgs if m["id"] != until_id]
-    prev = prev[-10:]  # ventana de contexto
+    prev = prev[-5:]  # ventana de contexto (5 mensajes, prompt ligero)
     lines = []
     for m in prev:
         who = "Blanco" if m["author"] != "Hermes" else "Hermes"
