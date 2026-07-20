@@ -75,12 +75,32 @@ SYSTEM = (
 )
 
 
-def _hermes_think(text: str) -> str:
+def _build_context(msgs: list[dict], until_id: str) -> str:
+    """Historial de la sala hasta el mensaje actual (memoria de conversación)."""
+    # mensajes anteriores al actual, en orden cronológico
+    prev = [m for m in msgs if m["id"] != until_id]
+    prev = prev[-10:]  # ventana de contexto
+    lines = []
+    for m in prev:
+        who = "Blanco" if m["author"] != "Hermes" else "Hermes"
+        lines.append(f"{who}: {m['text']}")
+    return "\n".join(lines)
+
+
+def _hermes_think(text: str, context: str = "") -> str:
     """Invoca al motor real de Hermes (gratuito, credential Nous ya configurada)."""
     hermes = shutil.which("hermes")
     if not hermes:
         return "[Hermes] motor no disponible (hermes CLI no encontrado)."
-    prompt = f"{SYSTEM}\n\nMensaje de Blanco:\n{text}\n\nRespuesta de Hermes:"
+    hist = ""
+    if context.strip():
+        hist = "Historial de la conversación en la sala (de más antiguo a más reciente):\n" + context + "\n\n"
+    prompt = (
+        f"{SYSTEM}\n"
+        f"Esta es una conversación CONTINUA en la sala; usa el historial "
+        f"para no perder el hilo.\n{hist}"
+        f"Mensaje actual de Blanco:\n{text}\n\nRespuesta de Hermes:"
+    )
     try:
         r = subprocess.run(
             [hermes, "-z", prompt, "--safe-mode"],
@@ -88,7 +108,6 @@ def _hermes_think(text: str) -> str:
         )
         out = (r.stdout or "").strip()
         if not out:
-            # fallback: a veces el modelo escribe en stderr o hay aviso
             out = (r.stderr or "").strip().splitlines()
             out = [l for l in out if l and "warn" not in l.lower()][:1]
             out = out[0] if out else ""
@@ -98,8 +117,8 @@ def _hermes_think(text: str) -> str:
     except subprocess.TimeoutExpired:
         return "[Hermes] tardé demasiado en responder; reintenta."
     except Exception as e:
-        log.exception("hermes_think fallo")
-        return f"[Hermes] fallo al invocar motor: {e}"
+        log.exception("hermes_think falló")
+        return f"[Hermes] falló al invocar motor: {e}"
 
 
 def loop(once: bool = False):
@@ -111,7 +130,11 @@ def loop(once: bool = False):
                       and m["author"] != "Hermes"]
             for m in nuevos:
                 try:
-                    resp = _hermes_think(m["text"])
+                    # Pasa el historial de la sala (memoria de conversación),
+                    # no solo el mensaje aislado, para que Hermes no "olvide"
+                    # lo hablado entre iteraciones.
+                    ctx = _build_context(msgs, m["id"])
+                    resp = _hermes_think(m["text"], ctx)
                     _http("POST", "/messages",
                           {"author": "Hermes", "text": resp, "parent_id": m["id"]})
                     seen.add(m["id"])  # solo tras postear con éxito
