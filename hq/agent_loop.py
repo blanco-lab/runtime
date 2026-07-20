@@ -33,7 +33,7 @@ WORKSPACE = REPO / "hq" / "workspace"
 STATE = WORKSPACE / "agent_state.json"
 LOG = WORKSPACE / "agent.log"
 API = "http://127.0.0.1:8765/api/v2/team"
-POLL = 5.0  # segundos
+POLL = 2.0  # segundos (respuesta rápida)
 THINK_TIMEOUT = 240  # s (hermes -z gratis puede tardar; antes 150 daba timeouts)
 
 logging.basicConfig(
@@ -239,12 +239,8 @@ def loop(once: bool = False):
                     if prop:
                         cmd = prop.group(1).strip()
                         if _is_safe(cmd):
-                            # Inofensivo: ejecuto YA, como en la terminal CLI
-                            salida = _run_command(cmd)
-                            _http("POST", "/messages",
-                                  {"author": "Hermes",
-                                   "text": f"Ejecutado (sin aprobación, comando de lectura):\n{salida}",
-                                   "parent_id": m["id"]})
+                            # Acción trivial: ejecutar y ya, sin postear nada.
+                            _run_command(cmd)
                         else:
                             # Sensible: espera ACEPTAR
                             pending = cmd
