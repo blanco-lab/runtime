@@ -29,7 +29,8 @@ button{font-family:inherit;cursor:pointer}
 .nav button.active{background:var(--bg3);color:var(--txt);box-shadow:inset 2px 0 0 var(--accent)}
 .nav .tag{font-size:9px;color:var(--txt3);font-family:var(--mono)}
 .nav .ic{width:18px;display:inline-block;color:var(--accent);font-size:12px}
-.main{margin-left:218px;padding:30px 38px;max-width:1180px}
+.main{margin-left:218px;padding:30px 38px;max-width:1180px;min-height:calc(100vh - 60px)}
+.team-view{display:flex;flex-direction:column;height:calc(100vh - 120px)}
 .head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:24px;gap:16px}
 .head h1{font-size:21px;font-weight:600;letter-spacing:-.2px}
 .head .kbd{font-size:11px;color:var(--txt3);font-family:var(--mono);border:1px solid var(--line2);
@@ -42,6 +43,7 @@ button{font-family:inherit;cursor:pointer}
 .card.bad{border-color:#3a2a2a}.card.bad .n{color:var(--bad)}
 .grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:16px}
 .panel{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.team-panel{display:flex;flex-direction:column;height:calc(100vh - 140px);max-height:calc(100vh - 140px)}
 .panel h2{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--txt2);font-weight:600;margin-bottom:13px}
 .boardcol{display:flex;flex-direction:column;gap:10px}
 .seg{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
@@ -64,18 +66,23 @@ button{font-family:inherit;cursor:pointer}
 .shell input{background:transparent;border:0;color:var(--txt);font-family:var(--mono);font-size:12.5px;outline:none;width:calc(100% - 90px)}
 .ph{color:var(--txt3);font-style:italic;font-size:12px;padding:8px 2px;border:1px dashed var(--line2);
   border-radius:8px;text-align:center;margin-top:8px}
-.msgs{display:flex;flex-direction:column;gap:9px;max-height:360px;overflow:auto;margin-bottom:12px}
+.msgs{display:flex;flex-direction:column;gap:9px;flex:1;overflow:auto;margin-bottom:12px;min-height:200px}
 .msg{background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:10px 12px}
 .msg.unread{border-left:3px solid var(--accent)}
 .msg .mh{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt2);margin-bottom:5px}
 .msg .au{font-weight:600;color:var(--txt)}
 .msg .ru{color:var(--accent);font-size:9px}.msg .r{color:var(--txt3);font-size:9px}
 .msg .mt{font-size:13px;color:var(--txt);white-space:pre-wrap}
-.msg .mact{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+.msg .mact{display:none}  /* etiquetas ocultas por ahora (Blanco, 2026-07-20) */
 .msg .mact button{background:var(--bg2);border:1px solid var(--line2);color:var(--txt2);
   border-radius:6px;padding:3px 9px;font-size:11px}
 .msg .mact button:hover{border-color:var(--accent);color:var(--accent)}
-.composer{display:flex;gap:8px}
+.thinking{display:flex;align-items:center;gap:8px;color:var(--accent);font-size:12px;
+  font-style:italic;padding:8px 2px}
+.thinking .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);
+  animation:bp 1s infinite}
+@keyframes bp{0%,100%{opacity:.3}50%{opacity:1}}
+.composer{display:flex;gap:8px;margin-top:auto}
 .composer input{flex:1;background:var(--bg3);border:1px solid var(--line);border-radius:8px;
   padding:10px 12px;color:var(--txt);font-family:inherit;font-size:13px;outline:none}
 .composer input:focus{border-color:var(--accent)}
@@ -151,18 +158,24 @@ const V={
       ${rows}<div class="ph">HQ orquesta, no contiene. project.yaml futuro.</div></div>`;
   },
   async team(c){
-    c.innerHTML=`<div class="panel"><h2>Horizon Team · sala permanente</h2>
+    c.innerHTML=`<div class="team-view"><div class="panel team-panel"><h2>Horizon Team · sala permanente</h2>
       <div id="msgs" class="msgs"></div>
+      <div id="think" class="thinking" style="display:none"><span class="dot"></span><span>Hermes está pensando…</span></div>
       <div class="composer">
         <input id="msg" autocomplete="off" placeholder="escribe como Blanco, Atlas o Hermes…" />
         <button id="send">Enviar</button>
-      </div>
-      <div class="ph">Promueve cualquier mensaje a ADR / Tarea / Principio / Informe / Decisión (Workspace → Git, Safety).</div></div>`;
+      </div></div></div>`;
     const box=$("#msgs");
+    const think=$("#think");
     const scrollEnd=()=>{box.scrollTop=box.scrollHeight;};
     const render=async()=>{
       const d=await api("/api/v2/team/messages");
       const ms=d.messages||[];
+      // ¿Hermes está pensando? (mensaje de Blanco sin respuesta de Hermes después)
+      const lastBlanco=ms.filter(m=>m.author!=="Hermes").pop();
+      const lastHermes=ms.filter(m=>m.author==="Hermes").pop();
+      const thinking = lastBlanco && (!lastHermes || lastHermes.parent_id!==lastBlanco.id);
+      think.style.display = thinking ? "flex" : "none";
       box.innerHTML=ms.map(m=>`<div class="msg ${m.read?'read':'unread'}">
         <div class="mh"><span class="au">${esc(m.author)}</span>
           <span class="ts">${new Date(m.ts*1000).toLocaleString()}</span>
@@ -174,13 +187,8 @@ const V={
           <button data-act="tarea" data-id="${m.id}">▸ Tarea</button>
           <button data-act="principio" data-id="${m.id}">▸ Principio</button>
           <button data-act="informe" data-id="${m.id}">▸ Informe</button>
-          <button data-act="decision" data-id="${m.id}">▸ Decisión</button>
+          <button data-act="decisión" data-id="${m.id}">▸ Decisión</button>
         </div></div>`).join("")||'<div class="ph">sala vacía — escribe el primer mensaje</div>';
-      box.querySelectorAll(".mact button").forEach(b=>b.onclick=async()=>{
-        const id=b.dataset.id, act=b.dataset.act;
-        if(act==='reply'){const t=prompt("Respuesta:");if(t&&t.trim()){await fetch("/api/v2/team/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({author:"Blanco",text:t,parent_id:id})});render();}}
-        else{const r=await fetch("/api/v2/team/promote",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({msg_id:id,target:act,by:"HQ-003"})});const j=await r.json();alert(j.ok?('Promovido a '+act+': '+(j.file||'')):'Error: '+(j.error||''));if(j.ok)render();}
-      });
       // marcar leídos
       const nuevos=ms.filter(m=>!m.read).map(m=>m.id);
       if(nuevos.length)await fetch("/api/v2/team/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:nuevos})});
