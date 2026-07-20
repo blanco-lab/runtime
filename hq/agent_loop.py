@@ -177,6 +177,33 @@ def _run_command(cmd: str) -> str:
         return f"$ {cmd}\n[error] {e}"
 
 
+def _is_safe(cmd: str) -> bool:
+    """True si el comando es solo lectura / inocuo (no requiere aprobación).
+
+    Replica la lógica de aprobación de la terminal CLI: comandos de lectura
+    se ejecutan sin pedir OK; escritura/destructivos esperan ACEPTAR.
+    """
+    c = cmd.strip()
+    # Peligrosos explícitos -> NO seguro
+    danger = ("rm ", "sudo", "shutdown", "reboot", "mkfs", "dd ", "mv ",
+              "cp ", "> ", ">>", "chmod", "chown", "useradd", "userdel",
+              "passwd", "kill ", "pkill", "systemctl", "pacman", "apt",
+              "dnf", "yum", "pip install", "npm install", "crontab",
+              "mkfs", "format", "truncate", "wget ", "curl " )
+    low = c.lower()
+    if any(d in low for d in danger):
+        return False
+    # Solo lectura / inocuo -> SEGURO (ejecutar sin pedir)
+    safe_prefixes = ("date", "whoami", "ls", "cat", "pwd", "ps", "df",
+                     "du", "echo", "uname", "head", "tail", "grep", "wc",
+                     "id", "uptime", "free", "top", "stat", "file", "which",
+                     "env", "printenv", "hostname", "ip ", "ss ", "ifconfig")
+    if low.split()[0] in safe_prefixes or any(low.startswith(p) for p in safe_prefixes):
+        return True
+    # Por defecto: sensible (pedir ACEPTAR)
+    return False
+
+
 def loop(once: bool = False):
     state = _load_state()
     seen = set(state.get("seen", []))
@@ -205,20 +232,26 @@ def loop(once: bool = False):
                 try:
                     ctx = _build_context(msgs, m["id"])
                     resp = _hermes_think(m["text"], ctx)
-                    # Postea el output tal cual (incluye [[EJECUTAR: cmd]],
-                    # "Salida del comando", razonamiento — sin filtrar).
                     _http("POST", "/messages",
                           {"author": "Hermes", "text": resp, "parent_id": m["id"]})
-                    # ¿El motor propone un comando? Lo deja pendiente de ACEPTAR.
+                    # ¿El motor propone un comando?
                     prop = PROP_RE.search(resp)
                     if prop:
                         cmd = prop.group(1).strip()
-                        pending = cmd
-                        # Aviso de aprobación aparte (lo que ves en CLI al pedir OK)
-                        _http("POST", "/messages",
-                              {"author": "Hermes",
-                               "text": f"⏳ Esperando tu ACEPTAR para ejecutar:\n  {cmd}",
-                               "parent_id": m["id"]})
+                        if _is_safe(cmd):
+                            # Inofensivo: ejecuto YA, como en la terminal CLI
+                            salida = _run_command(cmd)
+                            _http("POST", "/messages",
+                                  {"author": "Hermes",
+                                   "text": f"Ejecutado (sin aprobación, comando de lectura):\n{salida}",
+                                   "parent_id": m["id"]})
+                        else:
+                            # Sensible: espera ACEPTAR
+                            pending = cmd
+                            _http("POST", "/messages",
+                                  {"author": "Hermes",
+                                   "text": f"⏳ Esperando tu ACEPTAR para ejecutar:\n  {cmd}",
+                                   "parent_id": m["id"]})
                     seen.add(m["id"])
                     log.info("Blanco -> Hermes respondió (%d chars)", len(resp))
                 except Exception:
